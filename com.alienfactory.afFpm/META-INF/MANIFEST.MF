@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: afFpm
+Bundle-SymbolicName: com.alienfactory.afFpm;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Require-Bundle: org.fantom.sys,
+ org.fantom.fanr;resolution:=optional,
+ org.fantom.util,
+ org.fantom.concurrent,
+ org.fantom.compiler

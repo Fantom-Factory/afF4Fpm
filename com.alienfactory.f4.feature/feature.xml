@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feature
+      id="com.alienfactory.f4.feature"
+      label="F4 Add-Ons"
+      version="1.0.0.qualifier"
+      provider-name="Alien-Factory">
+
+   <description url="http://pods.fantomfactory.org/pods/afFpm/">
+      Provides plugins for:
+- Fantom Pod Manager (FPM) Environments
+   </description>
+
+   <license url="">
+      Copyright (c) 2016, Steve Eynon
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+   </license>
+
+   <url>
+      <discovery label="Fantom-Factory Pod Repository" url="http://pods.fantomfactory.org/"/>
+   </url>
+
+   <requires>
+      <import feature="com.xored.f4.feature" version="1.0.3"/>
+      <import feature="org.fantom" version="1.0.68"/>
+      <import feature="org.eclipse.dltk.core"/>
+      <import plugin="org.fantom.sys"/>
+      <import plugin="com.xored.f4.core"/>
+      <import plugin="com.xored.f4.builder.ui"/>
+      <import plugin="org.eclipse.core.runtime"/>
+      <import plugin="org.eclipse.core.resources"/>
+      <import plugin="org.eclipse.ui"/>
+      <import plugin="org.eclipse.ui.forms"/>
+      <import plugin="org.eclipse.dltk.ui"/>
+      <import plugin="org.eclipse.dltk.launching"/>
+      <import plugin="org.eclipse.dltk.logconsole"/>
+      <import plugin="org.fantom.fanr"/>
+      <import plugin="org.fantom.util"/>
+      <import plugin="org.fantom.concurrent"/>
+      <import plugin="org.fantom.compiler"/>
+   </requires>
+
+   <plugin
+         id="com.alienfactory.f4.afFpm"
+         download-size="0"
+         install-size="0"
+         version="1.0.0.qualifier"
+         unpack="false"/>
+
+   <plugin
+         id="com.alienfactory.afFpm"
+         download-size="0"
+         install-size="0"
+         version="1.0.0.qualifier"
+         unpack="false"/>
+
+</feature>
