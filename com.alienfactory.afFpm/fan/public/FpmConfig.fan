@@ -23,6 +23,18 @@ const class FpmConfig {
 
 	** A map of named remote fanr repositories.
 	const Str:Uri	fanrRepos
+	
+	** A list of libraries used to launch applications
+	const Str[]		launchPods
+
+	** The config files used to generate this class.
+	const File[]	configFiles
+
+	** The raw FPM config gleaned from the 'configFiles'.
+	** Does not include fanr credentials.
+	const Str:Str	rawConfig
+
+	private const Str:Str	_rawConfig
 
 	private new makePrivate(|This|in) { in(this) }
 	
@@ -41,18 +53,19 @@ const class FpmConfig {
 		workDirs := "" as Str
 		workDirs = (workDirs?.trimToNull == null ? "" : workDirs + File.pathSep) + (envPaths ?: "")
 		workDirs = (workDirs?.trimToNull == null ? "" : workDirs + File.pathSep) + homeDir.uri.toStr
-		workFile := workDirs.split(File.pathSep.chars.first).map { toAbsDir(it) + `etc/afFpm/config.props` }.unique as File[]
+		workFile := workDirs.split(File.pathSep.chars.first).map { toAbsDir(it) + `etc/afFpm/fpm.props` }.unique as File[]
 		if (fpmFile != null)
 			workFile.insert(0, fpmFile)
+		workFile = workFile.findAll { it.exists }
 
 		fpmProps := Str:Str[:] { it.ordered = true }
-		workFile.eachr { if (it.exists) fpmProps.setAll(it.readProps) }
+		workFile.eachr { fpmProps.setAll(it.readProps) }
 
-		return makeInternal(baseDir, homeDir, envPaths, fpmProps)
+		return makeInternal(baseDir, homeDir, envPaths, fpmProps, workFile.reverse)
 	}
 
 	@NoDoc
-	internal new makeInternal(File baseDir, File homeDir, Str? envPaths, Str:Str fpmProps) {
+	internal new makeInternal(File baseDir, File homeDir, Str? envPaths, Str:Str fpmProps, File[]? configFiles) {
 		baseDir = baseDir.normalize
 		if (baseDir.isDir.not || baseDir.exists.not)
 			throw ArgErr("Base directory is not valid: ${baseDir.osPath}")
@@ -75,7 +88,7 @@ const class FpmConfig {
 			return repos
 		}
 		if (repoDirs.containsKey("default").not)
-			repoDirs["default"] = this.workDirs.first.plus(`repo/`, false)
+			repoDirs["default"] = this.workDirs.first.plus(`fpmRepo/`, false)
 		this.fileRepos = repoDirs
 		
 		tempDir := fpmProps["tempDir"]
@@ -87,7 +100,7 @@ const class FpmConfig {
 		this.podDirs = podDirs?.split(File.pathSep.chars.first)?.map { toRelDir(baseDir, it) }?.findAll |File dir->Bool| { dir.exists }?.unique ?: File#.emptyList
 
 		fanrRepos := (Str:Uri) fpmProps.findAll |path, name| {
-			name.startsWith("fanrRepo.")
+			name.startsWith("fanrRepo.") && name.endsWith(".username").not && name.endsWith(".password").not
 		}.reduce(Str:Uri[:] { ordered=true }) |Str:Uri repos, Str path, key| {
 			url  := path.trim.toUri
 			name := key["fanrRepo.".size..-1]
@@ -96,18 +109,35 @@ const class FpmConfig {
 			repos[name] = url
 			return repos
 		}
-		this.fanrRepos = fanrRepos
+		this.fanrRepos		= fanrRepos
+		
+		this.launchPods 	= fpmProps["launchPods"]?.split(',') ?: Str#.emptyList
+		
+		this.configFiles	= configFiles ?: File[,]
+		
+		this._rawConfig		= fpmProps
+		
+		// as Env is available to the entire FVM, be nice and remove any credentials
+		// it's just lip service really, as anyone could re-read the fpm.config files
+		this.rawConfig		= fpmProps.exclude |val, key| { key.endsWith(".username") || key.endsWith(".password") }
 	}
 	
 	** Returns a fanr 'Repo' instance for the named repository. 
 	** May be either a 'fileRepo' or a 'fanrRepo'. 
-	Repo fanrRepo(Str repoName) {
-		// FPM doesn't need / use a local fanr repo, but other may find it useful
+	** 
+	** 'username' and 'password' are only used if a 'fanrRepo' is returned.
+	Repo fanrRepo(Str repoName, Str? username := null, Str? password := null) {
+		// FPM doesn't need / use a local fanr repo, but others may find it useful
 		if (fileRepos.containsKey(repoName))
 			return Repo.makeForUri(fileRepos[repoName].uri)
 		
-		if (fanrRepos.containsKey(repoName))
-			return toFanrRepo(fanrRepos[repoName])
+		if (fanrRepos.containsKey(repoName)) {
+			if (username == null)
+				username = _rawConfig["fanrRepo.${repoName}.username"]
+			if (password == null)
+				password = _rawConfig["fanrRepo.${repoName}.password"]
+			return toFanrRepo(fanrRepos[repoName], username, password)
+		}
 		
 		allRepoNames := fileRepos.keys.addAll(fanrRepos.keys).sort
 		throw ArgErr("Cound not find remote repo with name '${repoName}'. Available repos: " + allRepoNames.join(","))
@@ -119,10 +149,11 @@ const class FpmConfig {
 	** FPM Environment:
 	** 
 	**    Target Pod : shStackHubAdmin 0+
-	**    Home Dir   : C:\Apps\fantom-1.0.68
-	**    Work Dirs  : C:\Repositories\Fantom, C:\Apps\fantom-1.0.68
-	**    Pod Dirs   : C:\Projects\StackHub\stackhub-admin\lib
-	**    Temp Dir   : C:\Repositories\Fantom\temp
+	**      Home Dir : C:\Apps\fantom-1.0.68
+	**     Work Dirs : C:\Repositories\Fantom, C:\Apps\fantom-1.0.68
+	**      Pod Dirs : C:\Projects\StackHub\stackhub-admin\lib
+	**      Temp Dir : C:\Repositories\Fantom\temp
+	**  Config Files : C:\Apps\fantom-1.0.68\etc\afFpm\config.props
 	**    File Repos :
 	**       default = C:\Repositories\Fantom\repo-default
 	**       release = C:\Repositories\Fantom\repo-release
@@ -132,34 +163,54 @@ const class FpmConfig {
 	** <pre
 	Str dump() {
 		str := ""
-		str += "   Home Dir   : ${homeDir.osPath}\n"
-		str += "   Work Dirs  : " + (workDirs.join(", ") { it.osPath }.trimToNull ?: "(none)") + "\n"
-		str += "   Pod Dirs   : " + (podDirs .join(", ") { it.osPath }.trimToNull ?: "(none)") + "\n"
-		str += "   Temp Dir   : ${tempDir.osPath}\n"
+		str += "      Home Dir : ${homeDir.osPath}\n"
+		str += "     Work Dirs : " + dumpList(workDirs)
+		str += "      Pod Dirs : " + dumpList(podDirs)
+		str += "      Temp Dir : ${tempDir.osPath}\n"
+		str += "  Config Files : " + dumpList(configFiles)
 
-		str += "   File Repos : " + (fileRepos.isEmpty ? "(none)" : "") + "\n"
-		maxDir := fileRepos.keys.reduce(13) |Int size, repoName| { size.max(repoName.size) } as Int
+		if (fileRepos.size > 0)
+			str += "\n"
+		str += "    File Repos : " + (fileRepos.isEmpty ? "(none)" : "") + "\n"
+		maxDir := fileRepos.keys.reduce(14) |Int size, repoName| { size.max(repoName.size) } as Int
 		fileRepos.each |repoDir, repoName| {
 			str += repoName.justr(maxDir) + " = " + repoDir.osPath + "\n"
 		}
 
-		str += "   Fanr Repos : " + (fanrRepos.isEmpty ? "(none)" : "") + "\n"
-		maxDir = fanrRepos.keys.reduce(13) |Int size, repoName| { size.max(repoName.size) } as Int
+		if (fanrRepos.size > 0)
+			str += "\n"
+		str += "    Fanr Repos : " + (fanrRepos.isEmpty ? "(none)" : "") + "\n"
+		maxDir = fanrRepos.keys.reduce(14) |Int size, repoName| { size.max(repoName.size) } as Int
 		fanrRepos.each |repoUrl, repoName| {
 			usr	:= repoUrl.userInfo == null ? "" : repoUrl.userInfo + "@"
 			// Fantom Str.replace() bug - see http://fantom.org/forum/topic/2413
 			url	:= usr.isEmpty ? repoUrl.toStr : repoUrl.toStr.replace(usr, "")
 			str += repoName.justr(maxDir) + " = " + url + "\n"
 		}
+
 		return str
 	}
 
-	internal static Repo toFanrRepo(Uri url) {
+	private Str dumpList(File[] files) {
+		if (files.isEmpty)
+			return "(none)\n"
+
+		str := "${files.first.osPath}\n"
+		if (files.size > 1)
+			files[1..-1].each {
+				str += "".justr(14) + "   ${it.osPath}\n"
+			}
+		return str
+	}
+
+	internal static Repo toFanrRepo(Uri url, Str? usr := null, Str? pwd := null) {
 		userStr	 := url.userInfo == null ? "" : url.userInfo + "@"
 		repoUrl	 := url.toStr.replace(userStr, "").toUri
 		// TODO do proper percent decoding
 		username := Uri.decode(url.userInfo?.split(':')?.getSafe(0)?.replace("%40", "@") ?: "").toStr.trimToNull	// decode percent encoding
 		password := Uri.decode(url.userInfo?.split(':')?.getSafe(1)?.replace("%40", "@") ?: "").toStr.trimToNull
+		if (usr != null)	username = usr
+		if (pwd != null)	password = pwd
 		return Repo.makeForUri(repoUrl, username, password)
 	}
 	

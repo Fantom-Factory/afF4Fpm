@@ -8,24 +8,12 @@ const class FpmCompileEnv : CompileEnv {
 	override const Str description	:= "Use Alien-Factory's awesome Fantom Pod Manager"	
 	override const Uri? envPodUrl	:= `platform:/plugin/com.alienfactory.afFpm/afFpm.pod`
 
-		FpmEnv?	fpmEnv {
-			get { fpmEnvRef.val }
-			set { fpmEnvRef.val = it }
-		}
-		const AtomicRef	fpmEnvRef	:= AtomicRef() 
+	const AtomicRef	fpmEnvRef		:= AtomicRef()
+	const AtomicRef	fpmConfigRef	:= AtomicRef()
 
 	new make(FantomProject? fanProj := null) : super.make(fanProj) { }
 
 	override Str:File resolvePods() {
-		buildConsole.debug("\n\n")
-
-		fpmEnv = FpmEnvF4(fpmConfig) {
-			it.name		= fanProj.podName
-			it.version	= fanProj.version
-			it.depends	= fanProj.rawDepends
-			it.log		= buildConsole
-		}		
-		
 		// if we couldn't resolve any pods - default to ALL pods, latest versions thereof
 		podFiles := fpmEnv.resolvedPodFiles.isEmpty ? fpmEnv.allPodFiles : fpmEnv.resolvedPodFiles
 		return podFiles.map { it.file }
@@ -49,11 +37,27 @@ const class FpmCompileEnv : CompileEnv {
 	override Void publishPod(File podFile) {
 		prefs	:= FpmEnvPrefs(fanProj)
 		repo	:= prefs.publishToDefault ? "default" : prefs.publishRepo
-		PodManager() { it.fpmConfig = this.fpmConfig }.publishPod(podFile, repo)
+		PodManagerImpl() { it.fpmConfig = this.fpmConfig }.publishPod(podFile, repo)
 	}
 	
+	private FpmEnv fpmEnv() {
+		if (fpmEnvRef.val == null) {
+			buildConsole.debug("\n\n")
+	
+			fpmEnvRef.val = FpmEnvF4(fpmConfig) {
+				it.name		= fanProj.podName
+				it.version	= fanProj.version
+				it.depends	= fanProj.rawDepends
+				it.log		= buildConsole
+			}		
+		}
+		return fpmEnvRef.val
+	}
+
 	private FpmConfig fpmConfig() {
-		FpmConfig(fanProj.baseDir, fanProj.fanHomeDir, Env.cur.vars["FAN_ENV_PATH"])
+		if (fpmConfigRef.val == null)
+			fpmConfigRef.val = FpmConfig(fanProj.baseDir, fanProj.fanHomeDir, Env.cur.vars["FAN_ENV_PATH"])
+		return fpmConfigRef.val
 	}
 	
 	private Void setEnvVar(Str:Str envVars, Str key, Str val) {

@@ -87,7 +87,7 @@ internal class PodResolverFanrLocal : PodResolver {
 			if (!dependency.match(podName.ver))
 				return null
 			
-			return fileCache.get(file)
+			return fileCache.getOrMake(file)
 
 		}.exclude { it == null }
 	}
@@ -95,7 +95,7 @@ internal class PodResolverFanrLocal : PodResolver {
 	override PodVersion[] resolveAll() {
 		repoDir.listDirs.map |repoDir->PodName?| {
 			repoDir.listFiles(podRegex).map { PodName(it) }.exclude { it == null }.sort.last
-		}.exclude { it == null }.map |PodName pod->PodVersion| { fileCache.get(pod.file) }
+		}.exclude { it == null }.map |PodName pod->PodVersion| { fileCache.getOrMake(pod.file) }
 	}
 }
 
@@ -140,8 +140,8 @@ internal class PodResolverPath : PodResolver {
 	}
 
 	override PodVersion[] resolve(Depend dependency) {
-		file 		:= pathDir.plus(`${dependency.name}.pod`)	
-		podVersion	:= fileCache.get(file)
+		file 		:= pathDir.plus(`${dependency.name}.pod`)
+		podVersion	:= fileCache.getOrMake(file)
 
 		if (podVersion != null)
 			if (!dependency.match(podVersion.version))
@@ -151,7 +151,7 @@ internal class PodResolverPath : PodResolver {
 	}
 
 	override PodVersion[] resolveAll() {
-		pathDir.listFiles(Regex.glob("*.pod")).map { fileCache.get(it) }.exclude { it == null }
+		pathDir.listFiles(Regex.glob("*.pod")).map { fileCache.getOrMake(it) }.exclude { it == null }
 	}
 }
 
@@ -165,7 +165,7 @@ internal class PodResolverPod : PodResolver {
 	}
 
 	override PodVersion[] resolve(Depend dependency) {
-		podVersion	:= fileCache.get(podFile)
+		podVersion	:= fileCache.getOrMake(podFile)
 
 		if (podVersion != null)
 			if (dependency.name != podVersion.name || dependency.match(podVersion.version).not)
@@ -175,7 +175,7 @@ internal class PodResolverPod : PodResolver {
 	}
 	
 	override PodVersion[] resolveAll() {
-		fileCache.get(podFile) ?: PodVersion#.emptyList
+		[fileCache.getOrMake(podFile)]
 	}
 }
 
@@ -194,11 +194,11 @@ internal class PodResolverFanrRemote : PodResolver {
 
 	override PodVersion[] resolve(Depend dependency) {
 		latest := localResolvers.resolve(dependency).sort.last
-		echo("Querying ${repoName} for ${dependency} ( > $latest.version)")
+		echo("Querying ${repoName} for ${dependency}" + ((latest == null) ? "" : " ( > $latest.version)"))
 		specs := repo.query(dependency.toStr, numVersions)
 		vers  := specs
 			.findAll |PodSpec spec->Bool| {
-				spec.version > latest.version
+				(latest == null) ? true : spec.version > latest.version
 			}
 			.map |PodSpec spec->PodVersion| {
 				PodVersion(`fanr://${repoName}/${dependency}`, spec)
