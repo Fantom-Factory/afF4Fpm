@@ -36,6 +36,12 @@ abstract const class FpmEnv : Env {
 	new makeManual(FpmConfig fpmConfig, File[] f4PodFiles, |This|? in := null) : super.make() {
 		in?.call(this)	// can't do field null comparison without an it-block ctor
 
+		title := "Fantom Pod Manager ${typeof.pod.version}"
+		log.debug("")
+		log.debug("${title}")
+		log.debug("".padl(title.size, '='))		
+		log.debug("")
+
 		this.fpmConfig	= fpmConfig
 		this.fileDirs	= fpmConfig.podDirs.dup.addAll(fpmConfig.workDirs).add(fpmConfig.homeDir)
 		podDepends		:= PodDependencies(fpmConfig, f4PodFiles, log)
@@ -62,7 +68,7 @@ abstract const class FpmEnv : Env {
 			this.allPodFiles = podFiles
 
 		} catch (UnknownPodErr err) {
-			// TODO: auto-download / install the pod dependency!
+			// TODO auto-download / install the pod dependency!??
 			// beware, also thrown by BuildPod on malformed dependency str
 			error = err
 
@@ -97,7 +103,6 @@ abstract const class FpmEnv : Env {
 
 		if (unresolvedPods.size > 0) {
 			log.warn(Utils.dumpUnresolved(unresolvedPods))
-			// FIXME we should use the semi-resolved pods
 			if (targetPod == "???")
 				this.allPodFiles = podDepends.podResolvers.resolveAll(allPodFiles.rw) { remove(targetPod.split.first) }
 			else
@@ -153,7 +158,7 @@ abstract const class FpmEnv : Env {
 		str	:= "\n\n"
 		str += "FPM Environment:\n"
 		str += "\n"
-		str += "   Target Pod : ${targetPod}\n"
+		str += "    Target Pod : ${targetPod}\n"
 		str += fpmConfig.dump
 		str += "\n"
 		str += "Resolved ${resolvedPodFiles.size} pod" + (resolvedPodFiles.size == 1 ? "" : "s") + (resolvedPodFiles.size == 0 ? "" : ":") + "\n"

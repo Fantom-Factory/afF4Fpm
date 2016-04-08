@@ -4,13 +4,14 @@ class Build : BuildPod {
 
 	new make() {
 		podName = "afFpm"
-		summary = "Fantom Pod Manager"
-		version = Version("0.0.1.002")
+		summary = "Provides a targeted environment for compiling, testing, and running Fantom applications"
+		version = Version("0.0.2")
 
 		meta = [
-			"proj.name"		: "Fantom Pod Manager",	
-			"repo.tags"		: "sys",
-			"repo.public"	: "false"
+			"proj.name"		: "Fantom Pod Manager",
+			"repo.internal"	: "true",
+			"repo.tags"		: "sys, app",
+			"repo.public"	: "true"
 		]
 
 		depends = [
@@ -18,13 +19,11 @@ class Build : BuildPod {
 			"fanr       1.0.67 - 1.0",
 			"util       1.0.67 - 1.0",
 			"concurrent 1.0.67 - 1.0",			
-			"compiler   1.0.67 - 1.0"	// for afPlastic			
+			"compiler   1.0.67 - 1.0",	// for afPlastic			
 		]
 
-		outPodDir = `./`
-
 		srcDirs = [`fan/`, `fan/afPlastic/`, `fan/internal/`, `fan/internal/cmds/`, `fan/internal/util/`, `fan/public/`]
-		resDirs = [,]
+		resDirs = [`doc/`, `res/`]
 		
 		docApi	= true
 		docSrc	= true

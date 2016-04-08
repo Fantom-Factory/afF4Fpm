@@ -8,7 +8,7 @@ internal class Main {
 		
 		if (cmd == null)
 			return HelpCmd().run
-		
+
 		switch (cmd) {
 			case "build":
 				return BuildCmd().run
@@ -29,13 +29,18 @@ internal class Main {
 				return InstallCmd().run
 		
 			case "uninstall":
-				return UnInstallCmd().run
+				return UninstallCmd().run
 
+			case "-h":
+			case "-?":
+			case "\\?":
 			case "help":
-				return HelpCmd().run
+			case "-help":
+			case "--help":
+				return HelpCmd() { it.cmd = cmd }.run
 
 		  default:
-		    throw ArgErr("Unknown cmd: ${cmd}")
+		    return HelpCmd() { it.cmd = cmd }.run
 		}
 	}
 }

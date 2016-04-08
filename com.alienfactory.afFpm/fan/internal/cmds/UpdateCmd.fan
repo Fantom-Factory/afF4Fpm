@@ -2,24 +2,45 @@ using util
 using fanr::PodSpec
 
 // can this install from scratch AND update an existing?
-** Updates dependencies for a named pod / build file.
+// TODO: can the Update cmd be merged with Install?
+** Updates and installs dependencies for a named pod / build file.
+** 
+** Queries remote repositories looking for newer pod versions that match the 
+** targeted FPM environment.
+** 
+** Examples:
+** 
+**   C:\> fpm update
+**   C:\> fpm update -r default build.fan
+**   C:\> fpm update -r release myPod 2.0.10
+** 
 @NoDoc	// Fandoc is only saved for public classes
 class UpdateCmd : FpmCmd {
 
-	@Opt { aliases=["r"]; help="Name or location of the local repository to publish pods to" }
+	@NoDoc @Opt { aliases=["n"]; help="Number of pod versions to query" } 
+	Int numVersions	:= 5
+	
+	@NoDoc @Opt { aliases=["c"]; help="Query for Fantom core pods" } 
+	Bool core
+	
+	@Opt { aliases=["r"]; help="Name or location of the local repository to install pods to (defaults to 'default')" }
 	Str repo	:= "default"
-
-	@Opt { aliases=["p"]; help="The pod whose dependencies are to be updated. Examples, afIoc, afBedSheet@1.5, pods\\myPod.pod" }
-	Str? pod
 
 	// TODO update, resolving ALL pods
 //	@Opt { aliases=["a"]; help="By default FPM will only query for pods newer than the ones on your file system. This option will look for ALL pods, but at the expense of a much slower resolution." }
 //	Str all	:= "all"
 
-	override Int go() {
-		podDepends	:= PodDependencies(fpmConfig, File[,], log)
+	@Arg { help="The pod whose dependencies are to be updated" }
+	Str[]? pod
 
-		if (pod != null) {
+	new make() : super.make() { }
+
+	override Int go() {
+		printTitle
+		podDepends	:= PodDependencies(fpmConfig, File[,], log)
+		pod 		:= this.pod?.join(" ")
+		
+		if (pod != null && !pod.endsWith(".fan")) {
 			podFile	:= null as PodFile
 			file	:= FileUtils.toFile(pod)
 			if (file.exists)
@@ -33,9 +54,9 @@ class UpdateCmd : FpmCmd {
 			podDepends.setRunTarget(podFile.asDepend)
 		}
 		
-		if (pod == null) {
-			// TODO download dependencies for a specific build file
-			buildPod	:= BuildPod("build.fan")		
+		if (pod == null || pod.endsWith(".fan")) {
+			// TODO parse script for "using" statements and update those
+			buildPod	:= BuildPod(pod ?: "build.fan")
 			if (buildPod == null) {
 				log.err("Could not find / load 'build.fan'")
 				return 101
@@ -44,8 +65,14 @@ class UpdateCmd : FpmCmd {
 		}		
 
 		
-		
-		podDepends.podResolvers.addRemoteRepos
+		doUpdate(podDepends, repo, core)
+		log.info("")
+		log.info("Done.")
+		return 0
+	}
+	
+	internal Void doUpdate(PodDependencies podDepends, Str? repo, Bool queryCore) {
+		podDepends.podResolvers.addRemoteRepos(numVersions, queryCore, log)
 		podDepends.satisfyDependencies
 
 		if (podDepends.unresolvedPods.size > 0) {
@@ -54,9 +81,14 @@ class UpdateCmd : FpmCmd {
 		}
 
 		toUpdate := podDepends.podFiles.vals.findAll { it.url.scheme == "fanr" }
+		log.info("")
 
+		if (toUpdate.size == 0) {
+			log.info("Nothing to update.")
+		}
+		
 		toUpdate.each |podFile| {
-			log.info("  Downloading ${podFile} from ${podFile.url.host}")
+			log.info("Downloading ${podFile} from ${podFile.url.host}")
 
 			in := fpmConfig.fanrRepo(podFile.url.host).read(PodSpec([
 				"pod.name"		: podFile.name,
@@ -70,11 +102,7 @@ class UpdateCmd : FpmCmd {
 			finally out.close
 			
 			podManager.publishPod(file, repo)
-		}
-		log.info("\n")
-		log.info("All pods are up to date!")
-		log.info("Done.")
-		return 0
+		}		
 	}
 	
 	override Bool argsValid() { true }

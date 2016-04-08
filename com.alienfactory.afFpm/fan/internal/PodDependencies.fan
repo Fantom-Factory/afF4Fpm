@@ -83,9 +83,6 @@ internal class PodDependencies {
 		if (targetPod != null && targetPod.startsWith("afFpm"))
 			log.level = LogLevel.info
 		
-		title := "Fantom Pod Manager ${typeof.pod.version}"
-		log.debug(title)
-		log.debug("".padl(title.size, '='))
 		log.debug("Resolving pods for $targetPod")
 
 		allNodes.vals.each { expandNode(it, Depend[,]) }
@@ -146,7 +143,9 @@ internal class PodDependencies {
 						badGroups.add(badGrp)
 					}
 					// keep the error with the least amount of unsatisfied constraints
-					if (unsatisfied.isEmpty || res.size < unsatisfied.size)
+//					if (unsatisfied.isEmpty || res.size < unsatisfied.size)
+//					logErr(res)
+					if (unsatisfied.isEmpty)
 						unsatisfied = res
 
 				} else {
@@ -222,6 +221,20 @@ internal class PodDependencies {
 		
 		log.level = oldLogLevel
 		return this
+	}
+	
+	private Void logErr(PodConstraint[] unsat) {
+		conGrps := groupBy(unsat) |PodConstraint con->Str| { con.dependsOn.name }
+		unresolvedPods := conGrps.map |PodConstraint[] cons, Str name->UnresolvedPod| {
+			UnresolvedPod {
+				it.name			= name
+				it.available	= availablePodVersions(name).map { it.version }
+				it.committee	= cons.sort
+			}
+		}.vals
+		
+		echo("-----")
+		echo(Utils.dumpUnresolved(unresolvedPods))
 	}
 	
 	// see https://en.wikipedia.org/wiki/AC-3_algorithm

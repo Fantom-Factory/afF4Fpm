@@ -27,7 +27,7 @@ const mixin PodManager {
 	abstract PodFile publishPod(File pod, Str? repo := null, Str? username := null, Str? password := null)
 	
 	** Deletes the named pod from the local repository.
-	abstract Void unPublishPod(Str pod, Str repo)
+	abstract Void unPublishPod(Str pod, Str? repo)
 	
 }
 
@@ -37,6 +37,11 @@ const class PodManagerImpl : PodManager {
 
 	const FpmConfig		fpmConfig
 	
+	@NoDoc	// used by afBuild::PublishPodTask
+	static new makeWithLog(Log log) {
+		PodManagerImpl { it.log = log }
+	}
+
 	@NoDoc
 	new make(|This|? in := null) {
 		in?.call(this)
@@ -60,7 +65,7 @@ const class PodManagerImpl : PodManager {
 		
 		// note the manual indent!
 		repoName := repo ?: "default"
-		log.info("  Publishing ${podFile} to ${repoName}")
+		log.info("Publishing ${podFile} to ${repoName}")
 
 		// publish to a file repo
 		if (fpmConfig.fileRepos.containsKey(repoName)) {
@@ -95,13 +100,19 @@ const class PodManagerImpl : PodManager {
 		}
 	}
 
-	override Void unPublishPod(Str pod, Str repo) {
-		if (!fpmConfig.fileRepos.containsKey(repo))
-			throw ArgErr("Repo '$repo' does not exist")
+	override Void unPublishPod(Str pod, Str? repo) {
+		repoName := repo ?: "default"
+		repoDir := fpmConfig.fileRepos[repoName]
+		if (repoDir == null)
+			repoDir = FileUtils.toFile(repoName)
+		if (repoDir.exists.not) {
+			log.info("Repo does not exist: ${repoDir.osPath}")
+			return
+		}
 		podDep := Depend(pod.replace("@", " "), true)
-		podFile := fpmConfig.fileRepos[repo] + podDep.name.toUri.plusSlash + (podDep.toStr.replace(" ", "-") + ".pod").toUri
+		podFile := repoDir + podDep.name.toUri.plusSlash + (podDep.toStr.replace(" ", "-") + ".pod").toUri
 		if (podFile.exists.not) {
-			log.info("Pod does not exist - ${podFile.osPath}")
+			log.info("Pod does not exist: ${podFile.osPath}")
 			return
 		}
 		podFile.delete
