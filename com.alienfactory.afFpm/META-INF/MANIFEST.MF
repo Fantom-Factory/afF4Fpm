@@ -8,3 +8,4 @@ Require-Bundle: org.fantom.sys,
  org.fantom.util,
  org.fantom.concurrent,
  org.fantom.compiler
+Bundle-Vendor: Alien-Factory

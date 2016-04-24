@@ -10,13 +10,18 @@ const class FpmCompileEnv : CompileEnv {
 
 	const AtomicRef	fpmEnvRef		:= AtomicRef()
 	const AtomicRef	fpmConfigRef	:= AtomicRef()
+	const AtomicRef	podFilesRef		:= AtomicRef()
 
 	new make(FantomProject? fanProj := null) : super.make(fanProj) { }
 
 	override Str:File resolvePods() {
-		// if we couldn't resolve any pods - default to ALL pods, latest versions thereof
-		podFiles := fpmEnv.resolvedPodFiles.isEmpty ? fpmEnv.allPodFiles : fpmEnv.resolvedPodFiles
-		return podFiles.map { it.file }
+		if (podFilesRef.val == null) {
+			// if we couldn't resolve any pods - default to ALL pods, latest versions thereof
+			podFiles := fpmEnv.resolvedPodFiles.isEmpty ? fpmEnv.allPodFiles : fpmEnv.resolvedPodFiles
+			
+			podFilesRef.val = podFiles.map { it.file }.toImmutable
+		}
+		return podFilesRef.val
 	}
 	
 	override Err[] resolveErrs() {
@@ -68,4 +73,3 @@ const class FpmCompileEnv : CompileEnv {
 			envVars[key] = val
 	}
 }
-

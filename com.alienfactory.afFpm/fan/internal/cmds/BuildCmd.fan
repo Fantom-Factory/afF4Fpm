@@ -37,7 +37,7 @@ class BuildCmd : FpmCmd {
 		cmds.insert(0, target)
 		cmds.insert(0, fanCmd)
 
-		log.info("Running build task: " + cmds[2..-1].join(" "))
+		log.info("FPM: Running build task: " + cmds[2..-1].join(" "))
 
 		process := Process(cmds)
 		process.mergeErr = false
@@ -49,8 +49,9 @@ class BuildCmd : FpmCmd {
 			return retVal
 
 		buildPod := BuildPod(target)
-		if (buildPod == null) {
+		if (buildPod.errMsg != null) {
 			log.warn("Could not compile script: ${target}")
+			log.warn("                        : ${buildPod.errMsg}")
 			return 1
 		}
 
