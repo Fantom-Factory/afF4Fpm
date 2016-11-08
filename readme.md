@@ -17,7 +17,7 @@ From within F4 visit the main menu and click `Help -> Install new software...` D
 
 To see 'F4 Add-Ons' you may need to de-select `Group items by category` as shown below.
 
-![Installing F4 Features]()
+![Installing F4 Features](https://bitbucket.org/repo/yGXyne/images/747274458-F4-FPM-Install.png)
 
 Click `next` and follow on screen instructions.
 
@@ -29,7 +29,7 @@ The Fantom Pod Manager feature adds support for using an [Fantom Pod Manager](ht
 
 After installing you should be able to select `FpmEnv` from the standard Fantom Env preferences dialogue.
 
-![Fantom Env Dialogue]()
+![Fantom Env Dialogue](https://bitbucket.org/repo/yGXyne/images/3081401872-F4-Env.png)
 
 A project that uses `FpmEnv` will resolve all its dependencies via the usual FPM means of `fpm.props` files. F4 will use the project's Fantom interpreter and imported environment variables (`PATH_ENV`) to find the `fpm.props` files.
 
