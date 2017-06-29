@@ -11,7 +11,7 @@ F4 Features currently boasts support for:
  
 ## Installation
 
-To install F4 Features, download the latest `.zip` from the [F4 Features Downloads Page](downloads).
+To install F4 Features, download the latest `.zip` from the [F4 Features Downloads Page](https://bitbucket.org/AlienFactory/f4-features/downloads/).
 
 From within F4 visit the main menu and click `Help -> Install new software...` Drag and drop the downloaded .zip file into the dialogue window.
 
