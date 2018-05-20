@@ -1,17 +1,19 @@
+using concurrent::ActorPool
 using concurrent::AtomicRef
+using concurrent::Future
 using f4core
 using afFpm
 
 const class FpmCompileEnv : CompileEnv {
+	override const Str label			:= "afFpm::FpmEnv"
+	override const Str description		:= "Use Alien-Factory's awesome Fantom Pod Manager"	
+	override const Uri? envPodUrl		:= `platform:/plugin/com.alienfactory.afFpm/afFpm.pod`
 
-	override const Str label		:= "afFpm::FpmEnv"
-	override const Str description	:= "Use Alien-Factory's awesome Fantom Pod Manager"	
-	override const Uri? envPodUrl	:= `platform:/plugin/com.alienfactory.afFpm/afFpm.pod`
-
-	const AtomicRef	fpmConfigRef	:= AtomicRef()
-	const AtomicRef	resolveErrsRef	:= AtomicRef()
-	const AtomicRef	dependsStrRef	:= AtomicRef()
-	const AtomicRef	resolvePodsRef	:= AtomicRef()
+	const AtomicRef	fpmConfigRef		:= AtomicRef()
+	const AtomicRef	resolveErrsRef		:= AtomicRef()
+	const AtomicRef	dependsStrRef		:= AtomicRef()
+	const AtomicRef	resolvePodsRef		:= AtomicRef()
+	const AtomicRef	resolveFutureRef	:= AtomicRef()
 
 	new make(FantomProject? fanProj := null) : super.make(fanProj) { }
 
@@ -20,7 +22,23 @@ const class FpmCompileEnv : CompileEnv {
 		dependsStr := fanProj.rawDepends.rw.sort |p1, p2| { p1.name <=> p2.name }.join("; ")
 		if (dependsStr == dependsStrRef.val)
 			return resolvePodsRef.val
+		
+		// coalesce multiple calls into one
+		future := resolveFutureRef.val as Future
+		if (future == null) {		
+			future = Synchronized(ActorPool()).async |->Obj?| { doResolvePods(dependsStr) }
+			resolveFutureRef.val = future
+		} else
+			buildConsole.debug("Coalescing build... for $target")
 
+		pods := future.get
+		resolvePodsRef.val		= pods
+		dependsStrRef.val		= dependsStr
+		resolveFutureRef.val	= null
+		return pods
+	}
+
+	private Str:File doResolvePods(Str dependsStr) {
 		// this method has been ripped and cut down from FpmEnv
 		log 			:= buildConsole
 		fpmConfig		:= fpmConfig
@@ -76,7 +94,8 @@ const class FpmCompileEnv : CompileEnv {
 
 		if (error != null) {
 			log.err  (error.toStr)
-			log.debug(error.traceToStr)
+			if (error isnot UnknownPodErr)
+				log.debug(error.traceToStr)
 		}		
 		
 		errs := Err[,]
@@ -85,9 +104,7 @@ const class FpmCompileEnv : CompileEnv {
 		resolveErrsRef.val = errs.toImmutable
 
 		pods := resolvedPods.map { it.file }
-		resolvePodsRef.val	= pods.toImmutable
-		dependsStrRef.val	= dependsStr
-		return pods
+		return pods.toImmutable	// for the Future!
 	}
 	
 	override Err[] resolveErrs() {

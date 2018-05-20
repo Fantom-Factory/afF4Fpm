@@ -5,7 +5,7 @@ class Build : BuildPod {
 	new make() {
 		podName = "f4afFpm"
 		summary = "A FPM Env extension for F4 projects"
-		version = Version("1.0.0")
+		version = Version("1.1.0")
 
 		meta = [
 			"proj.name" : "F4 FPM_ENV"
@@ -18,7 +18,7 @@ class Build : BuildPod {
 			"afFpm      0.2+"
 		]
 
-		srcDirs = [`fan/`]
+		srcDirs = [`fan/`, `fan/afConcurrent/`]
 
 		outPodDir = `./`
 

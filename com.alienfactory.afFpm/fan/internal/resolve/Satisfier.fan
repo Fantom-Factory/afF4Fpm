@@ -10,13 +10,17 @@ internal class Satisfier {
 			Duration			resolveTimeout1	:= 5sec
 			Duration			resolveTimeout2	:= 10sec
 
+			Bool				building
 			Depend				targetPod
 			Str:PodFile			resolvedPods	:= Str:PodFile[:]
 			Str:UnresolvedPod	unresolvedPods	:= Str:UnresolvedPod[:]
 	
-	private	Resolver			resolver
-	private Str:PodNode			podNodes		:= Str:PodNode[:] { it.ordered = true }
+	// the order shouldn't be an issue, but the order of the resulting PodGroups does have a HUGE effect on the resolve time 
+	// and can shave WHOLE SECONDS off!
+//	private Str:PodNode			podNodes		:= Str:PodNode[:] { it.ordered = true }
+	private Str:PodNode			podNodes		:= Str:PodNode[:]
 	private	Duration			startTime		:= Duration.now
+	private	Resolver			resolver
 
 	new make(TargetPod target, Resolver	resolver, |This|? f := null) {
 		f?.call(this)
@@ -41,6 +45,8 @@ internal class Satisfier {
 			// we can't resolve buildPods 'cos the pod ain't built yet!
 			// so set the given dependencies explicitly
 			initNode.addPodVersions([target.podFile])
+			
+			building = true
 		}
 		
 		// to save us the hassle of resolving and de-ciphering the UnresolvedPod results 
@@ -81,12 +87,11 @@ internal class Satisfier {
 		if (writeTraceFile)
 			doWriteTraceFile
 		
+		
 		startTime = Duration.now
 		max := nos.map { it.size }
 		cur := Int[,].fill(0, max.size)
 		
-		// a single err should be formed from multiple constraints, where A, B, C !==> D
-//		err := (Str:PodVersion[]) allNodes.map { PodVersion[,] }
 		fin := false
 		solutions	:= [Str:PodFile][,]
 		podMap 		:= Str:PodGroup[:] 
@@ -94,35 +99,43 @@ internal class Satisfier {
 		badGroups	:= Int?[][,]
 
 		// brute force - try every permutation of pod versions and see which ones work
+		count := 0
 		while (fin.not) {
+			count++
+
+			// note I deleted the badPodGroups optimisation - it worked, but it added extra SECONDS to calculate!
+			// actually - double check, I think with ~400 cached groups, it saved 1 second!
+
 			badIdx := badGroups.findIndex |badGrp->Bool| {
 				cur.all |v, i->Bool| { val := badGrp[i]; return val == null || val == v }
 			}
-
 			if (badIdx == null) {
+
 				podMap.clear
 				cur.each |v, i| { grp := nos[i][v]; podMap[grp.name] = grp }
-	
 				res := reduceDomain(podMap)
-
+	
 				if (res != null) {
-					depGrps := groupBy(res) |PodConstraint con->Str| { con.dependsOn.name }
-					depGrps.each |PodConstraint[] naa| {
-						names  := naa.map { it.pod.name }.add(naa.first.dependsOn.name)
-						badGrp := cur.map |v, i->Int?| {
-							names.contains(nos[i][v].name) ? v : null
+					
+					// limit bad groups - cos they become counter effective
+					if (badGroups.size < 500) {
+						depGrps := groupBy(res) |PodConstraint con->Str| { con.dependsOn.name }
+						depGrps.each |PodConstraint[] naa| {
+							names  := naa.map { it.pod.name }.add(naa.first.dependsOn.name)
+							badGrp := cur.map |v, i->Int?| {
+								names.contains(nos[i][v].name) ? v : null
+							}
+							badGroups.add(badGrp)
 						}
-						badGroups.add(badGrp)
 					}
-					
-					// keep the error with the least amount of unsatisfied constraints
-					// ... actually, that isn't always the best error to report
-//					if (unsatisfied.isEmpty || res.size < unsatisfied.size)
-					
-					badPods := logErr(res)
-					if (unsatisfied.isEmpty && badPods != null)
-						unsatisfied = badPods
-
+	
+					// just take the first err as it should be the most relevant with the most number of latest versions 
+					if (unsatisfied.isEmpty) {
+						badPods := logErr(res)
+						if (badPods != null)
+							unsatisfied = badPods					
+					}
+	
 				} else {					
 					solutions.add(
 						podMap.map { it.latest }
@@ -153,18 +166,28 @@ internal class Satisfier {
 			// use first solution if resolving takes over X seconds 
 			resolveTime := Duration.now - startTime
 			if (resolveTime > resolveTimeout1 && solutions.size > 0) {
-				fin = true
-				log.warn("Exceeded resolve timeout of ${resolveTimeout1.toLocale}. Returning early, resolved pods may be sub-optimal.\nTo increase timeout set environment variable FPM_RESOLVE_TIMEOUT_1 to a valid Fantom duration, e.g. 5sec")
+				per   := 100f * count / grpPerms
+				left  := resolveTime / 100 * (100 - per)
+				if (left > 1sec) {	// give it a 1sec grace to finish
+					stats := "Churned through ${per.toLocale}% of problem space in ${resolveTime.toLocale}; ${left.toLocale} left"
+					fin = true
+					log.warn("Exceeded resolve timeout of ${resolveTimeout1.toLocale}. Returning early, resolved pods may be sub-optimal.\n${stats}\nTo increase timeout set environment variable FPM_RESOLVE_TIMEOUT_1 to a valid Fantom duration, e.g. 5sec")
+				}
 			}
 			if (resolveTime > resolveTimeout2) {
-				fin = true
-				log.err("Could not find solution within ${resolveTimeout2.toLocale}. Returning early.\nTo increase timeout set environment variable FPM_RESOLVE_TIMEOUT_2 to a valid Fantom duration, e.g. 10sec")
+				per   := 100f * count / grpPerms
+				left  := resolveTime / 100 * (100 - per)
+				if (left > 1sec) {	// give it a 1sec grace to finish
+					stats := "Churned through ${per.toLocale}% of problem space in ${resolveTime.toLocale}; ${left.toLocale} left"
+					fin = true
+					log.err("Could not find solution within ${resolveTimeout2.toLocale}. Returning early.\n${stats}\nTo increase timeout set environment variable FPM_RESOLVE_TIMEOUT_2 to a valid Fantom duration, e.g. 10sec")
+				}
 			}
 		}
 
 		solveTime := Duration.now - startTime
 		log.debug("          ...Done")
-		log.debug("Cached ${badGroups.size} bad dependency group" + s(badGroups.size))
+		log.debug("Cached ${badGroups.size} " + (badGroups.size >= 500 ? "(MAX) " : "") + "bad dependency group" + s(badGroups.size))
 		log.debug("Found ${solutions.size} solution${s(solutions.size)} in ${solveTime.toLocale}")
 		
 
@@ -196,7 +219,8 @@ internal class Satisfier {
 			unsatisfied.each { unresolvedPods[it.name] = it }
 		}
 		
-		resolvedPods.remove(targetPod.name)
+		if (building)
+			resolvedPods.remove(targetPod.name)
 		return this
 	}
 	

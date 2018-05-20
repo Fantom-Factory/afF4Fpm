@@ -3,6 +3,8 @@
 [![Written in: Fantom](http://img.shields.io/badge/written%20in-Fantom-lightgray.svg)](http://fantom-lang.org/)
 ![Licence: MIT](http://img.shields.io/badge/licence-MIT-blue.svg)
 
+Plugins for the [Xored F4 Fantom IDE](http://www.xored.com/products/f4/).
+
 F4 Features currently boasts support for:
 
  - [Fantom Pod Manager](http://eggbox.fantomfactory.org/pods/afFpm/)
