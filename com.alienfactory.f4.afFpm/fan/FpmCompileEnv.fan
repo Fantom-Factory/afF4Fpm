@@ -10,10 +10,17 @@ const class FpmCompileEnv : CompileEnv {
 
 	const AtomicRef	fpmConfigRef	:= AtomicRef()
 	const AtomicRef	resolveErrsRef	:= AtomicRef()
+	const AtomicRef	dependsStrRef	:= AtomicRef()
+	const AtomicRef	resolvePodsRef	:= AtomicRef()
 
 	new make(FantomProject? fanProj := null) : super.make(fanProj) { }
 
 	override Str:File resolvePods() {
+		// FIXME pull this logic up into FantomProject
+		dependsStr := fanProj.rawDepends.rw.sort |p1, p2| { p1.name <=> p2.name }.join("; ")
+		if (dependsStr == dependsStrRef.val)
+			return resolvePodsRef.val
+
 		// this method has been ripped and cut down from FpmEnv
 		log 			:= buildConsole
 		fpmConfig		:= fpmConfig
@@ -22,12 +29,11 @@ const class FpmCompileEnv : CompileEnv {
 		unresolvedPods	:= Str:UnresolvedPod[:]
 		error			:= null as Err
 
-		log.debug("\n\n")
-		title := "Fantom Pod Manager (FPM) v${typeof.pod.version}"
+		title := "FPM: ${targetPod.pod}"
 		log.debug("")
-		log.debug("${title}")
-		log.debug("".padl(title.size, '-'))		
 		log.debug("")
+		log.debug(title)
+		log.debug("-" * title.size)
 
 		resolver := Resolver(fpmConfig.repositories).localOnly { it.log	= log }
 		
@@ -57,7 +63,7 @@ const class FpmCompileEnv : CompileEnv {
 			dumped = true
 		}
 
-		if (!dumped && log.isDebug) {
+		if (!dumped) {
 			log.debug(FpmEnv.dumpEnv(target, resolvedPods.vals, fpmConfig))
 			dumped = true
 		}
@@ -78,7 +84,10 @@ const class FpmCompileEnv : CompileEnv {
 		unresolvedPods.vals.each { errs.add(Err(it.toStr)) }
 		resolveErrsRef.val = errs.toImmutable
 
-		return resolvedPods.map { it.file }
+		pods := resolvedPods.map { it.file }
+		resolvePodsRef.val	= pods.toImmutable
+		dependsStrRef.val	= dependsStr
+		return pods
 	}
 	
 	override Err[] resolveErrs() {
