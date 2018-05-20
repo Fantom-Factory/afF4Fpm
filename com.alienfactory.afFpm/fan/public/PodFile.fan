@@ -1,57 +1,79 @@
 
-** Represents a pod version with a backing file.
+** Represents a pod backed by a repository.
 const class PodFile {
+
 	** The name of this pod.
 	const Str		name
 	
 	** The version of this pod.
 	const Version	version
 	
-	** Where the pod is located.
-	** May have a local 'file:' or a remote 'http:' scheme.
-	const Uri		url
-	
-	internal new make(|This|in) { in(this) }
-	
-	internal static new makeFromFile(File file) {
-		zip	:= Zip.read(file.in)
-		try {
-			File? 		entry
-			[Str:Str]?	metaProps
-			while (metaProps == null && (entry = zip.readNext) != null) {
-				if (entry.uri == `/meta.props`)
-					metaProps = entry.readProps
-			}
-			if (metaProps == null)
-				throw Err("Pod file ${file.normalize.osPath} does not contain `/meta.props`")
-			return PodVersion(file, metaProps).toPodFile
+	** The dependencies of this pod.
+	const Depend[]	dependsOn
 
-		} finally {
-			zip.close
-		}	
+	** Absolute URL of where this pod is located.
+	const Uri		location
+	
+	// TODO maybe have a canonical FPM URL like `fpm://default/afIoc/3.0.6`
+//	const Uri		url
+
+	** This pod's name and version expressed as a dependency.
+	const Depend	depend
+
+	** The repository where this pod file is held.
+	const Repository repository
+	
+	** Internal ctor
+	@NoDoc	// reserve make() for serialisation - if / when it happens!
+	new makeFields(Str name, Version version, Depend[] dependsOn, Uri location, Repository repository) {
+		this.name		= name
+		this.version	= version
+		this.dependsOn	= dependsOn
+		this.location	= location
+		this.depend		= Depend("$name $version")
+		this.repository	= repository
+	}
+	
+	** Creates a 'PodFile' from a file.  
+	static new fromFile(File file) {
+		SinglePodRepository(file).podFile
+	}
+	
+	** Returns 'true' if this is a core Fantom pod.
+	Bool isCore() {
+		CorePods.instance.isCorePod(name)
 	}
 	
 	** The backing file for this pod.
-	** Convenience for 'podFile.url.toFile'.
+	** If the pod has a remote location, this will download it to a local / memory representation.
 	File file() {
-		url.toFile
+		repository.download(this)
 	}
 	
-	** This pod version expressed as a dependency.
-	** Convenience for:
-	** 
-	**   syntax: fantom
-	**   Depend("$name $version")
-	Depend asDepend() {
-		Depend("$name $version")
+	** Deletes this pod from its owning repository.
+	Void delete() {
+		repository.delete(this)
 	}
-
-	@NoDoc
-	override Str toStr() 			{ "$name $version" }
+	
+	** Installs this pod in to the given repository.
+	Void installTo(Repository repository) {
+		repository.upload(this)
+	}
+	
+	** Returns 'true' if this *fits* the given dependency.
+	Bool fits(Depend depend) {
+		depend.name == this.name && depend.match(this.version)
+	}
+	
+	@NoDoc override Str toStr() 			{ "$name $version - $location" }
+	@NoDoc override Int hash() 				{ location.hash }
+	@NoDoc override Bool equals(Obj? that)	{ (that as PodFile)?.location == location }
 	
 	@NoDoc
-	override Int hash() 			{ file.hash }
-	
-	@NoDoc
-	override Bool equals(Obj? that)	{ file == (that as PodFile)?.file }
+	override Int compare(Obj obj) {
+		that := obj as PodFile
+		return this.name == that.name
+			? this.version <=> that.version
+			: this.name    <=> that.name
+	}
 }

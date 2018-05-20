@@ -1,11 +1,10 @@
-using util
 
 ** Tests a Fantom application.
 ** 
 ** Executes tests via 'fant' within an FPM environment.
 ** 
-** If the 'target' option is not specified, then the targeted environment is 
-** derived from the containing pod of the first test.
+** The target environment is taken to be the containing pod of the executed test.
+** It may be explicitly overridden using the '-target' option.
 ** 
 ** Examples:
 **   C:\> fpm test myPod
@@ -15,42 +14,43 @@ using util
 class TestCmd : FpmCmd {
 
 	@Opt { aliases=["t"]; help="The target pod" }
-	Str?	target
+	Depend?	target
 
-	@Opt { help="Run in Javascript environment" }
-	Bool	js
+	@Opt { aliases=["js"]; help="Run in Javascript environment (requies NodeJs)" }
+	Bool	javascript
 
-	** @mopUp
-	@Arg { help="Arguments to pass to fant"} 
+	@Arg { help="The Fantom pod / class / method to test"}
+	Str?	pod
+
+	@Arg { help="Arguments to pass to fant"}
 	Str[]?	args
 	
-	new make() : super.make() { }
+	new make(|This| f) : super(f) { }
 	
-	override Int go() {
-		cmds	:= args
-		target	:= target
-		
-		if (target == null) {
-			target = args.first ?: ""
-			if (target.contains("@"))
-				cmds[0] = target[0..<target.index("@")]
+	override Int run() {
+		if (pod == null) {
+			log.warn("Run what!?")
+			return invalidArgs
 		}
-		
-		if (js)
-			cmds.insert(0, "-js")
 
-		log.info("FPM: Testing " + cmds.join(" "))
+		cmds := Str[pod]
+		if (args != null)
+			cmds.addAll(args)
+
+		if (javascript)
+			throw UnsupportedErr("-js")
+			// FIXME run javascript
+//			cmds.insert(0, "compilerJs::NodeRunner blah blah blah")
+
+		log.info("FPM testing " + cmds.join(" "))
 		
 		process := ProcessFactory.fantProcess(cmds)
 		process.mergeErr = false
 		process.env["FAN_ENV"]		= FpmEnv#.qname
 		process.env["FPM_DEBUG"]	= debug.toStr
-		process.env["FPM_TARGET"]	= target
+		if (target != null)
+			process.env["FPM_TARGET"]	= target.toStr
 
 		return process.run.join
-	}
-	
-	override Bool argsValid() {
-		args.size > 0
 	}
 }

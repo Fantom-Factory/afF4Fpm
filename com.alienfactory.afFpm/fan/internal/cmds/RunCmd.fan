@@ -1,61 +1,56 @@
-using util
 
 ** Runs a Fantom application.
 ** 
 ** Executes a pod / method, within an FPM environment.
 ** 
-** If the 'target' option is not specified, then the targeted environment is 
-** derived from the containing pod.
+** The target environment is taken to be the containing pod of the executed method.
+** It may be explicitly overridden using the '-target' option.
 ** 
 ** Examples:
 **   C:\> fpm run myPod
-**   C:\> fpm run -js -target myPod myPod::MyClass
+**   C:\> fpm run -js -target myPod2 myPod::MyClass
 ** 
 @NoDoc	// Fandoc is only saved for public classes
 class RunCmd : FpmCmd {
-
+	
 	@Opt { aliases=["t"]; help="The target pod; maybe used when running scripts" }
-	Str?	target
+	Depend?	target
 
-	@Opt { help="Run in Javascript environment" }
-	Bool	js
+	@Opt { aliases=["js"]; help="Run in Javascript environment (requies NodeJs)" }
+	Bool	javascript
 
-	** @mopUp
+	@Arg { help="The Fantom pod / class / method to run"}
+	Str?	pod
+
 	@Arg { help="Arguments to pass to fan"}
 	Str[]?	args
-	
-	new make() : super.make() { }
 
-	override Int go() {
-		cmds	:= args
-		target	:= target
-		
-		if (target == null) {
-			target = args.getSafe(0) ?: ""
-			if (target.contains("@"))
-				cmds[0] = target[0..<target.index("@")]
+	new make(|This| f) : super(f) { }
 	
-			// cater for launch pods such as afBedSheet and afReflux
-			if (fpmConfig.launchPods.contains(target)) {
-				target = args.getSafe(1) ?: ""
-				if (target.contains("@"))
-					cmds[1] = target[0..<target.index("@")]			
-			}
+	override Int run() {		
+		if (pod == null) {
+			log.warn("Run what!?")
+			return invalidArgs
 		}
-		
-		if (js)
-			cmds.insert(0, "compilerJs::Runner")
 
-		log.info("FPM: Running " + cmds.join(" "))
+		cmds := Str[pod]
+		if (args != null)
+			cmds.addAll(args)
+
+		if (javascript)
+			throw UnsupportedErr("-js")
+			// FIXME run javascript
+//			cmds.insert(0, "compilerJs::NodeRunner blah blah blah")
+
+		log.info("FPM running " + cmds.join(" "))
 
 		process := ProcessFactory.fanProcess(cmds)
 		process.mergeErr = false
 		process.env["FAN_ENV"]		= FpmEnv#.qname
 		process.env["FPM_DEBUG"]	= debug.toStr
-		process.env["FPM_TARGET"]	= target
+		if (target != null)
+			process.env["FPM_TARGET"]	= target.toStr
 
 		return process.run.join
 	}
-	
-	override Bool argsValid() { true }
 }

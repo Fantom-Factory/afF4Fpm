@@ -1,101 +1,73 @@
 
-internal class PodDependencies {
-	private const Log			log
-			Str?				targetPod
-			Str:PodFile			podFiles		:= Str:PodFile[:]
+** This is where the real stuff happens!
+** The implementation is a bit naive and has room for improvement - but seems work well.
+** 
+** Note also, that this is a very small part of FPM! The Environment, Repositories, and Cmds all 
+** play a huge part and deflect my time away from this little class / problem.
+internal class Satisfier {
+			Log					log				:= typeof.pod.log
+			Bool				writeTraceFile	:= false
+			Duration			resolveTimeout1	:= 5sec
+			Duration			resolveTimeout2	:= 10sec
 
-	internal PodResolvers		podResolvers
-	internal Str?				building
-	internal UnresolvedPod[]	unresolvedPods	:= UnresolvedPod#.emptyList 
-
-	private FileCache			fileCache		:= FileCache()
-	private PodNode[]			initNodes		:= PodNode[,]
-	internal Str:PodNode		allNodes		:= Str:PodNode[:] { it.ordered = true }
+			Depend				targetPod
+			Str:PodFile			resolvedPods	:= Str:PodFile[:]
+			Str:UnresolvedPod	unresolvedPods	:= Str:UnresolvedPod[:]
 	
+	private	Resolver			resolver
+	private Str:PodNode			podNodes		:= Str:PodNode[:] { it.ordered = true }
 	private	Duration			startTime		:= Duration.now
 
-	new make(FpmConfig config, File[] podFiles, Log log) {
-		this.log 			= log
-		this.podResolvers	= PodResolvers(config, podFiles, fileCache)
-	}
-
-	Void setBuildTargetFromBuildPod(BuildPod buildPod, Bool checkDependencies) {
-		podName	:= buildPod.podName 
-		version	:= buildPod.version 
-		depends	:= buildPod.depends 
-		setBuildTarget(podName, version, depends.map { Depend(it, false) }.exclude { it == null }, checkDependencies)
-	}
-
-	Void setBuildTarget(Str name, Version version, Depend[] depends, Bool checkDependencies) {
-		addPod(name) {
-			// check the build dependencies exist
-			if (checkDependencies)
-				depends.each {
-					if (podResolvers.resolve(it).isEmpty)
-						throw UnknownPodErr(ErrMsgs.env_couldNotResolvePod(it))
-				}
-
-			it.podVersions = [PodVersion(null, Str:Str[
-				"pod.name"		: name,
-				"pod.version"	: version.toStr,
-				"pod.depends"	: depends.join(";")
-			])]
-		}
-		targetPod	= "${name} ${version}"
-		building	= name
-	}
-	
-	Void setRunTarget(Depend podDepend) {
-		podNode := addPod(podDepend.name) {
-			it.podVersions = podResolvers.resolve(podDepend)
-		}.pickLatestVersion
+	new make(TargetPod target, Resolver	resolver, |This|? f := null) {
+		f?.call(this)
+		this.targetPod	= target.pod
+		this.resolver	= resolver
 		
-		if (podNode.podVersions.isEmpty)
-			throw UnknownPodErr(ErrMsgs.env_couldNotResolvePod(podDepend))
-		
-		targetPod	= podDepend.toStr		
-	}
-	
-	PodVersion[] availablePodVersions(Str podName) {
-		allNodes[podName].podVersions
-	}
-	
-	internal PodNode addPod(Str podName) {
-		podNode := PodNode {
-			it.name = podName
+		initNode := PodNode {
+			it.name		= target.pod.name
+			it.initNode = true
 		}
-		allNodes[podName] = podNode
-		initNodes.add(podNode)
-		return podNode
-	}
-
-	Bool isEmpty() {
-		initNodes.isEmpty
+		
+		if (target.dependencies == null) {
+			podVers := resolver.resolve(targetPod)
+			if (podVers.isEmpty)
+				throw UnknownPodErr("Could not resolve target: $targetPod")
+			
+			initNode.addPodVersions(podVers)
+			// resolve should have returned the exact version, but just in case...
+			initNode.pickLatestVersion
+			
+		} else {
+			// we can't resolve buildPods 'cos the pod ain't built yet!
+			// so set the given dependencies explicitly
+			initNode.addPodVersions([target.podFile])
+		}
+		
+		// to save us the hassle of resolving and de-ciphering the UnresolvedPod results 
+		// just make sure we have the direct dependencies first
+		initNode.podVersions.first.dependsOn.each {
+			resolveNode(it, true)
+		}
+		
+		podNodes[initNode.name] = initNode
 	}
 	
 	This satisfyDependencies() {
-		// TODO have some sort of trace / verbose flag where we show *everything*!
-		if (targetPod == null)
-			return this
-		
-		// turn off debug when we're analysing ourself!
-		oldLogLevel := log.level
-		if (targetPod != null && targetPod.startsWith("afFpm"))
-			log.level = LogLevel.info
+		// todo have some sort of trace / verbose flag where we show *everything*!
 		
 		log.debug("Resolving pods for $targetPod")
 
-		allNodes.vals.each { expandNode(it, Depend[,]) }
+		podNodes.vals.each { expandNode(it, Depend[,]) }
 
-		// there's an opportunity for podPerms to overflow here! (Scary!) 
+		// there's an opportunity for podPerms to overflow here! (Scary @ 9,223,372,036,854,775,807!) 
 		// but there's no Err, the number just wraps round to zero
-		podPerms  := (Int) allNodes.vals.reduce(1) |Int tot, node| { tot * node.podVersions.size }
-		totalVers := (Int) allNodes.vals.reduce(0) |Int tot, node| { tot + node.podVersions.size }
-		log.debug("Found ${totalVers.toLocale} versions of ${allNodes.size.toLocale} different pod" + s(allNodes.size))
+		podPerms  := (Int) podNodes.vals.reduce(1) |Int tot, node| { tot * node.size }
+		totalVers := (Int) podNodes.vals.reduce(0) |Int tot, node| { tot + node.size }
+		log.debug("Found ${totalVers.toLocale} versions of ${podNodes.size.toLocale} different pod" + s(podNodes.size))
 		
 		// reduce PodVersions into groups
-		// this reduces the problem space from 661,348,800,000 dependency permutations to just 12,288!		
-		nos := (PodGroup[][]) allNodes.vals.map { it.reduceProblemSpace }.exclude { it->isEmpty }
+		// this can reduce the problem space from 610,397,977,600 dependency permutations to just 138,240!		
+		nos := (PodGroup[][]) podNodes.vals.map { it.reduceProblemSpace }.exclude { it->isEmpty }
 
 		grpPerms	:= (Int) nos.reduce(1) |Int tot, vers| { tot * vers.size }
 		podPermsStr	:= podPerms.toLocale
@@ -105,19 +77,19 @@ internal class PodDependencies {
 		log.debug("Collapsed to " + grpPermsStr.justr(maxPermSize - 13) + " dependency group permutation" + s(grpPerms))
 		log.debug("Stated problem space in ${(Duration.now - startTime).toLocale}")
 		log.debug("Solving...")
+		
+		if (writeTraceFile)
+			doWriteTraceFile
+		
 		startTime = Duration.now
-
 		max := nos.map { it.size }
 		cur := Int[,].fill(0, max.size)
 		
 		// a single err should be formed from multiple constraints, where A, B, C !==> D
 //		err := (Str:PodVersion[]) allNodes.map { PodVersion[,] }
 		fin := false
-		solutions := [Str:PodFile][,]
-
-		podMap  := Str:PodGroup[:] 
-		
-		
+		solutions	:= [Str:PodFile][,]
+		podMap 		:= Str:PodGroup[:] 
 		unsatisfied	:= UnresolvedPod[,]
 		badGroups	:= Int?[][,]
 
@@ -151,14 +123,9 @@ internal class PodDependencies {
 					if (unsatisfied.isEmpty && badPods != null)
 						unsatisfied = badPods
 
-				} else {
-					// found a working combination!
-	//				fin = true	// gotta find them all!
+				} else {					
 					solutions.add(
-						podMap
-							.map { it.latest }
-							.exclude |PodVersion p->Bool| { p.url == null }
-							.map |PodVersion p->PodFile| { p.toPodFile }
+						podMap.map { it.latest }
 					)
 				}
 			}
@@ -180,6 +147,18 @@ internal class PodDependencies {
 						}
 					}
 				}			
+			}
+			
+			// found a working combination!
+			// use first solution if resolving takes over X seconds 
+			resolveTime := Duration.now - startTime
+			if (resolveTime > resolveTimeout1 && solutions.size > 0) {
+				fin = true
+				log.warn("Exceeded resolve timeout of ${resolveTimeout1.toLocale}. Returning early, resolved pods may be sub-optimal.\nTo increase timeout set environment variable FPM_RESOLVE_TIMEOUT_1 to a valid Fantom duration, e.g. 5sec")
+			}
+			if (resolveTime > resolveTimeout2) {
+				fin = true
+				log.err("Could not find solution within ${resolveTimeout2.toLocale}. Returning early.\nTo increase timeout set environment variable FPM_RESOLVE_TIMEOUT_2 to a valid Fantom duration, e.g. 10sec")
 			}
 		}
 
@@ -204,28 +183,37 @@ internal class PodDependencies {
 			solRanks := solutions.map |solution->Obj| {
 				// we could normalise the rank index for each pod to 1 -> 10
 				// but pfft - why bother complicate things further!?
-				score := solution.reduce(0) |Int score, PodFile pod->Int| { score + podRanks[pod.name].index(pod.version) }
+				score := solution.reduce(0) |Int score, PodFile pod->Int| {
+					score + podRanks[pod.name].index(pod.version)
+				}
 				return [score, solution]
 			} as Obj[][]
-			podFiles = solRanks.min |s1, s2->Int| { s1[0] <=> s2[0] }.last
+			resolvedPods = solRanks.min |s1, s2->Int| { s1[0] <=> s2[0] }.last
 		}
 		
 		// convert errors to UnresolvedPods
 		if (solutions.isEmpty) {
-			// now done in logErr()
-//			conGrps := groupBy(unsatisfied) |PodConstraint con->Str| { con.dependsOn.name }
-//			unresolvedPods = conGrps.map |PodConstraint[] cons, Str name->UnresolvedPod| {
-//				UnresolvedPod {
-//					it.name			= name
-//					it.available	= availablePodVersions(name).map { it.version }
-//					it.committee	= cons.sort
-//				}
-//			}.vals
-			unresolvedPods = unsatisfied
+			unsatisfied.each { unresolvedPods[it.name] = it }
 		}
 		
-		log.level = oldLogLevel
+		resolvedPods.remove(targetPod.name)
 		return this
+	}
+	
+	private Void doWriteTraceFile() {
+		file	:= `fpm-trace-deps.txt`.toFile
+		out  	:= file.out
+		allPods := (PodFile[]) podNodes.vals.map { it.podVersions }.flatten.sort
+
+		out.printLine("// Trace dependency file for $targetPod - ${DateTime.now.toLocale}")
+		out.printLine
+		allPods.each |pod| {
+			out.printLine("addDep(${pod.depend.toStr.toCode}, " + pod.dependsOn.join(", ").toCode + ")")
+		}
+		out.printLine("satisfyDependencies(${targetPod})")
+
+		out.flush.close
+		log.debug("Wrote dependency trace file: $file.normalize.osPath")
 	}
 	
 	private UnresolvedPod[]? logErr(PodConstraint[] unsat) {
@@ -238,15 +226,18 @@ internal class PodDependencies {
 			}
 		}.vals
 
-		// FIXME: dodgy pod constraints!
+		// todo dodgy pod constraints!?
 		dodgy := unresolvedPods.any { it.isDodgy }
-
 		if (log.isDebug && !dodgy)
 			log.debug("\n-----\n" + Utils.dumpUnresolved(unresolvedPods))
 		
 		return dodgy ? null : unresolvedPods
 	}
-	
+
+	private PodFile[] availablePodVersions(Str podName) {
+		podNodes[podName].podVersions
+	}
+
 	// see https://en.wikipedia.org/wiki/AC-3_algorithm
 	private PodConstraint[]? reduceDomain(Str:PodGroup podGroups) {
 		podGroups.each { it.reset }
@@ -261,6 +252,7 @@ internal class PodDependencies {
 			if (nod == null || nod.noMatch(con.dependsOn)) {
 				// find out who else conflicted / removed the versions we wanted
 				// collect ALL the errors, so we can report on the solution with the smallest number of errs (if need be)
+
 				unsatisfied = allCons.findAll { it.dependsOn.name == con.dependsOn.name }
 				worklist.clear
 			}
@@ -272,20 +264,22 @@ internal class PodDependencies {
 		node.podVersions?.each |podVersion| {
 			if (stack.contains(podVersion.depend).not) {
 				stack.add(podVersion.depend)			
-				podVersion.depends.each |depend| {
-					innerNode := resolveNode(depend)
+				podVersion.dependsOn.each |depend| {
+					innerNode := resolveNode(depend, false)
 					expandNode(innerNode, stack)
 				}
 			}
 		}
 	}
 
-	private PodNode? resolveNode(Depend dependency) {
-		allNodes.getOrAdd(dependency.name) {
-			PodNode {
-				it.name = dependency.name
-			}
-		}.addPodVersions(podResolvers.resolve(dependency))
+	private PodNode resolveNode(Depend pod, Bool checked) {
+		vers := resolver.resolve(pod)
+		if (checked && vers.isEmpty)
+			throw UnknownPodErr("Could not resolve pod: ${pod}")
+
+		return podNodes.getOrAdd(pod.name) {
+			PodNode { it.name = pod.name }
+		}.addPodVersions(vers)
 	}
 	
 	private static Str s(Int size) {
@@ -304,33 +298,57 @@ internal class PodDependencies {
 
 @Serializable
 internal class PodNode {
-	const 	Str				name
-			PodVersion[]?	podVersions
+	const 	Str			name
+	const	Bool		initNode
+			PodFile[]?	podVersions { private set }
 
 	new make(|This|in) { in(this) }
 
 	This pickLatestVersion() {
 		picked := podVersions?.sort?.last
-		podVersions	= picked == null ? PodVersion#.emptyList : [picked]
+		podVersions	= picked == null ? PodFile#.emptyList : [picked]
 		return this
 	}
 	
-	This addPodVersions(PodVersion[] pods) {
-		podVersions = (podVersions == null) ? pods : podVersions.addAll(pods).unique.sort.reverse	// highest first
+	This addPodVersions(PodFile[] pods) {
+		if (podVersions == null)
+			podVersions = pods
+		else {
+			pods.each |pod| {
+				// don't use contains() or compare the URL, because the same version pod may come from different sources
+				// and we only need the one!
+				existing := podVersions.find { it.fits(pod.depend) }
+				if (existing == null)
+					podVersions.add(pod)
+				else {
+					// replace remote pods with local versions
+					if (existing.repository.isRemote && pod.repository.isLocal) {
+						idx := podVersions.index(existing)
+						podVersions[idx] = pod
+					}
+				}
+			}
+			
+		}
+		podVersions.sortr
 		return this
 	}
 	
 	PodGroup[] reduceProblemSpace() {
 		groups := Str:PodGroup[:]
 		podVersions.each |pod| {
-			group := groups[pod.dependsHash]
+			hash  := pod.dependsOn.dup.rw.sort.join("; ")
+			group := groups[hash]
 			if (group == null)
-				groups[pod.dependsHash] = PodGroup(pod)
+				groups[hash] = PodGroup(pod)
 			else
 				group.add(pod)
 		}
 		return groups.vals
 	}
+	
+	Bool isEmpty() { podVersions.isEmpty }
+	Int size() { podVersions.size }
 	
 	override Str toStr() 			{ podVersions?.first?.toStr ?: "${name} XXX" }
 	override Int hash() 			{ name.hash }

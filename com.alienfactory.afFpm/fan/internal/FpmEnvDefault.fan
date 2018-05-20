@@ -4,7 +4,7 @@ internal const class FpmEnvDefault : FpmEnv {
 	static new make() {
 		try {
 			if (Env.cur.vars["FPM_DEBUG"]?.trimToNull == "true")
-				Log.get("afFpm").level = LogLevel.debug
+				FpmEnv#.pod.log.level = LogLevel.debug
 
 			fpmConfig	:= FpmConfig()
 	
@@ -25,7 +25,7 @@ internal const class FpmEnvDefault : FpmEnv {
 	
 	private new makeManual(FpmConfig fpmConfig, File[] podFiles, |This|? in := null) : super.makeManual(fpmConfig, podFiles, in) { }
 
-	override Void findTarget(PodDependencies podDepends) {
+	override TargetPod findTarget() {
 		fanArgs	:= Env.cur.args
 		fpmArgs	:= Utils.splitQuotedStr(Env.cur.vars["FPM_TARGET"])
 		cmdArgs	:= fpmArgs ?: fanArgs
@@ -34,22 +34,19 @@ internal const class FpmEnvDefault : FpmEnv {
 		idx := cmdArgs.index("-fpmPod")
 		if (idx != null) {
 			podDepend := findPodDepend(cmdArgs.getSafe(idx + 1))
-			podDepends.setRunTarget(podDepend)
-			return
+			return TargetPod(podDepend)
 		}
 
 		// FPM_TARGET - use it if we got it
 		if (fpmArgs != null) {
 			buildPod := BuildPod(cmdArgs.first)		
-			if (buildPod.errMsg == null) {
-				podDepends.setBuildTargetFromBuildPod(buildPod, true)
-				return
+			if (buildPod != null && buildPod.errMsg == null) {
+				return TargetPod(buildPod)
 			}
 
 			podDepend := findPodDepend(cmdArgs.first)
 			if (podDepend != null) {
-				podDepends.setRunTarget(podDepend)
-				return
+				return TargetPod(podDepend)
 			}
 		}
 
@@ -60,29 +57,28 @@ internal const class FpmEnvDefault : FpmEnv {
 			mainMethod = Env.cur.mainMethod 
 			if (mainMethod != null) {
 	
-				// make a HUGE assumption here that the build script is the one in the current directory
+				// made a HUGE assumption here that the build script is the one in the current directory
+				// not much I can do about it though
 				if (mainMethod.qname == "build::BuildPod.main") {
-					buildPod := BuildPod("build.fan")		
+					buildPod := BuildPod("build.fan")
 					if (buildPod.errMsg == null) {
-						podDepends.setBuildTargetFromBuildPod(buildPod, true)
-						return
+						return TargetPod(buildPod)
 					}
 				}
 				
 				podDepend := Depend("${mainMethod.parent.pod.name} 0+")
-				podDepends.setRunTarget(podDepend)
-				return
+				return TargetPod(podDepend)
 			}
 		}
 
-		log.debug("Could not parse pod from: mainMethod: ${mainMethod?.qname ?: Str.defVal} or args: ${cmdArgs.first ?: Str.defVal} - ${Env.cur.args}")
+		throw Err("Could not parse pod from: mainMethod: ${mainMethod?.qname ?: Str.defVal} or args: ${cmdArgs.first ?: Str.defVal} - ${Env.cur.args}")
 	}
 
 	static Depend? findPodDepend(Str? arg) {
 		if (arg == null || arg.endsWith(".fan"))
 			return null
 
-		// TODO: check for version e.g. afIoc@3.0
+		// FIXME ?? check for version e.g. afIoc@3.0
 		dependStr := (Str?) null
 		if (arg.all { isAlphaNum })
 			dependStr = arg
