@@ -8,30 +8,81 @@ const class FpmCompileEnv : CompileEnv {
 	override const Str description	:= "Use Alien-Factory's awesome Fantom Pod Manager"	
 	override const Uri? envPodUrl	:= `platform:/plugin/com.alienfactory.afFpm/afFpm.pod`
 
-	const AtomicRef	fpmEnvRef		:= AtomicRef()
 	const AtomicRef	fpmConfigRef	:= AtomicRef()
-	const AtomicRef	podFilesRef		:= AtomicRef()
+	const AtomicRef	resolveErrsRef	:= AtomicRef()
 
 	new make(FantomProject? fanProj := null) : super.make(fanProj) { }
 
 	override Str:File resolvePods() {
-		if (podFilesRef.val == null) {
-			// if we couldn't resolve any pods - default to ALL pods, latest versions thereof
-			podFiles := fpmEnv.resolvedPodFiles.isEmpty ? fpmEnv.allPodFiles : fpmEnv.resolvedPodFiles
+		// this method has been ripped and cut down from FpmEnv
+		log 			:= buildConsole
+		fpmConfig		:= fpmConfig
+		targetPod		:= TargetPod(target, fanProj.rawDepends)
+		resolvedPods	:= Str:PodFile[:]
+		unresolvedPods	:= Str:UnresolvedPod[:]
+		error			:= null as Err
+
+		log.debug("\n\n")
+		title := "Fantom Pod Manager (FPM) v${typeof.pod.version}"
+		log.debug("")
+		log.debug("${title}")
+		log.debug("".padl(title.size, '-'))		
+		log.debug("")
+
+		resolver := Resolver(fpmConfig.repositories).localOnly { it.log	= log }
+		
+		try {
+			satisfied	:= resolver.satisfy(targetPod)
+			resolver.cleanUp
 			
-			podFilesRef.val = podFiles.map { it.file }.toImmutable
+			resolvedPods	= satisfied.resolvedPods
+			unresolvedPods	= satisfied.unresolvedPods
+			
+		} catch (UnknownPodErr err) {
+			// todo auto-download / install the pod dependency!??
+			// beware, also thrown by BuildPod on malformed dependency str
+			error = err
+
+		} catch (Err err) {
+			error = err
 		}
-		return podFilesRef.val
+		
+		// ---- dump stuff to logs ----
+
+		dumped := false
+
+		// if there's something wrong, then make sure the user sees the dump
+		if (error != null || unresolvedPods.size > 0) {
+			log.warn(FpmEnv.dumpEnv(target, resolvedPods.vals, fpmConfig))
+			dumped = true
+		}
+
+		if (!dumped && log.isDebug) {
+			log.debug(FpmEnv.dumpEnv(target, resolvedPods.vals, fpmConfig))
+			dumped = true
+		}
+
+		if (unresolvedPods.size > 0) {
+			log.warn(dumpUnresolved(unresolvedPods.vals))
+			log.warn("Defaulting to latest pod versions")
+			resolvedPods = resolver.resolveAll(false).setAll(resolvedPods)
+		}
+
+		if (error != null) {
+			log.err  (error.toStr)
+			log.debug(error.traceToStr)
+		}		
+		
+		errs := Err[,]
+		if (error != null) errs.add(error)
+		unresolvedPods.vals.each { errs.add(Err(it.toStr)) }
+		resolveErrsRef.val = errs.toImmutable
+
+		return resolvedPods.map { it.file }
 	}
 	
 	override Err[] resolveErrs() {
-		errs := Err[,]
-		if (fpmEnv.error != null)
-			errs.add(fpmEnv.error)
-		fpmEnv.unresolvedPods.each {
-			errs.add(Err(it.toStr))
-		}
-		return errs
+		resolveErrsRef.val ?: Err#.emptyList 
 	}
 	
 	override Void tweakLaunchEnv(Str:Str envVars) {
@@ -40,28 +91,19 @@ const class FpmCompileEnv : CompileEnv {
 	}
 	
 	override Void publishPod(File podFile) {
-		prefs	:= FpmEnvPrefs(fanProj)
-		repo	:= prefs.publishToDefault ? "default" : prefs.publishRepo
-		PodManagerImpl() { it.fpmConfig = this.fpmConfig }.publishPod(podFile, repo)
+		prefs		:= FpmEnvPrefs(fanProj)
+		repoName	:= prefs.publishToDefault ? "default" : prefs.publishRepo
+		repository	:= fpmConfig.repository(repoName) ?: throw Err("Could not find repository named '${repoName}' - " + fpmConfig.repositories.join(", ") { it.name })
+		PodFile(podFile).installTo(repository)
 	}
 	
-	private FpmEnv fpmEnv() {
-		if (fpmEnvRef.val == null) {
-			buildConsole.debug("\n\n")
-	
-			fpmEnvRef.val = FpmEnvF4(fpmConfig) {
-				it.name		= fanProj.podName
-				it.version	= fanProj.version
-				it.depends	= fanProj.rawDepends
-				it.log		= buildConsole
-			}		
-		}
-		return fpmEnvRef.val
+	private Depend target() {
+		Depend("${fanProj.podName} ${fanProj.version}")
 	}
 
 	private FpmConfig fpmConfig() {
 		if (fpmConfigRef.val == null)
-			fpmConfigRef.val = FpmConfig(fanProj.baseDir, fanProj.fanHomeDir, Env.cur.vars["FAN_ENV_PATH"])
+			fpmConfigRef.val = FpmConfig(fanProj.projectDir, fanProj.fanHomeDir, Env.cur.vars["FAN_ENV_PATH"])
 		return fpmConfigRef.val
 	}
 	
@@ -71,5 +113,13 @@ const class FpmCompileEnv : CompileEnv {
 				buildConsole.warn("Did not set environment variable $key to [$val] as it is already set to: ${envVars[key]}")
 		} else
 			envVars[key] = val
+	}
+	
+	private static Str dumpUnresolved(UnresolvedPod[] unresolvedPods) {
+		out	:= "Could not satisfy the following constraints:\n"
+		unresolvedPods.each |unresolvedPod| {
+			out	+= unresolvedPod.dump
+		}
+		return out
 	}
 }

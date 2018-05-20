@@ -12,10 +12,10 @@ class Build : BuildPod {
 		]
 
 		depends = [
-			"sys        1.0",
-			"concurrent 1.0",
+			"sys        1.0.69 - 1.0",
+			"concurrent 1.0.69 - 1.0",
 			"f4core     1.0",
-			"afFpm        0+"
+			"afFpm      0.2+"
 		]
 
 		srcDirs = [`fan/`]
