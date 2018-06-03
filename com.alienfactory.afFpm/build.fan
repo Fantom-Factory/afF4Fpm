@@ -18,13 +18,13 @@ class Build : BuildPod {
 		depends = [
 			"sys        1.0.69 - 1.0",
 			"fanr       1.0.69 - 1.0",
-			"concurrent 1.0.69 - 1.0",			
-			"compiler   1.0.69 - 1.0",	// for afPlastic			
+			"concurrent 1.0.69 - 1.0",
+			"compiler   1.0.69 - 1.0",	// for afPlastic
 		]
 
 		srcDirs = [`fan/`, `fan/afConcurrent/`, `fan/afPlastic/`, `fan/afProcess/`, `fan/internal/`, `fan/internal/cmds/`, `fan/internal/repos/`, `fan/internal/resolve/`, `fan/internal/utils/`, `fan/public/`]
-		resDirs = [`doc/`, `res/`]
-		
+		resDirs = [`res/`]
+
 		docApi	= true
 		docSrc	= true
 	}

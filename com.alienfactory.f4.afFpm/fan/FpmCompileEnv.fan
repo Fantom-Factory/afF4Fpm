@@ -1,6 +1,4 @@
-using concurrent::ActorPool
 using concurrent::AtomicRef
-using concurrent::Future
 using f4core
 using afFpm
 

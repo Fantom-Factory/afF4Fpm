@@ -18,7 +18,7 @@ class Build : BuildPod {
 			"afFpm      0.2+"
 		]
 
-		srcDirs = [`fan/`, `fan/afConcurrent/`]
+		srcDirs = [`fan/`]
 
 		outPodDir = `./`
 
