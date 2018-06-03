@@ -40,7 +40,7 @@ abstract const class FpmEnv : Env {
 	}
 
 	@NoDoc
-	new makeManual(FpmConfig fpmConfig, File[] f4PodFiles, |This|? in := null) : super.make(Env.cur) {
+	new makeManual(FpmConfig fpmConfig, |This|? in := null) : super.make(Env.cur) {
 		in?.call(this)	// let F4 set its own logger
 
 		if (log.isDebug) {
@@ -57,13 +57,15 @@ abstract const class FpmEnv : Env {
 		
 		try {
 			targetPod	:= findTarget
-			satisfied	:= resolver.satisfy(targetPod)
-			resolver.cleanUp
-			
-			this.targetPod		= satisfied.targetPod
-			this.resolvedPods	= satisfied.resolvedPods
-			this.unresolvedPods	= satisfied.unresolvedPods
-			this.environmentPods= resolver.resolveAll(true).setAll(satisfied.resolvedPods)
+			if (targetPod != null) {
+				satisfied	:= resolver.satisfy(targetPod)
+				resolver.cleanUp
+				
+				this.targetPod		= satisfied.targetPod
+				this.resolvedPods	= satisfied.resolvedPods
+				this.unresolvedPods	= satisfied.unresolvedPods
+				this.environmentPods= resolver.resolveAll(true).setAll(satisfied.resolvedPods)
+			}
 			
 		} catch (UnknownPodErr err) {
 			// todo auto-download / install the pod dependency!??
@@ -84,11 +86,11 @@ abstract const class FpmEnv : Env {
 		if (targetPod.name == "???")
 			if (!loggedLatest) {
 				loggedLatest = true
-				log.info("FPM: Could not target pod - defaulting to latest pod versions")
+				log.warn("FPM: Could not find target - defaulting to latest pod versions")
 				this.environmentPods = resolver.resolveAll(false).setAll(resolvedPods)
 			}
 
-		if (Env.cur.vars["FPM_ALL_PODS"]?.toBool(false) ?: false)
+		if (Env.cur.vars["FPM_ALL_PODS"]?.lower?.toBool(false) == true)
 			if (!loggedLatest) {
 				loggedLatest = true
 				log.info("FPM: Found env var: FPM_ALL_PODS = true; making all pods available")
@@ -161,7 +163,7 @@ abstract const class FpmEnv : Env {
 	}
 
 	@NoDoc
-	abstract TargetPod findTarget()
+	abstract TargetPod? findTarget()
 
 	** Dumps the FPM environment to a string. This includes the FPM Config and a list of resolved pods.
 	Str dump() {

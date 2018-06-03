@@ -9,12 +9,14 @@ internal class Main {
 		if (cmdStr == null)
 			cmdStr = "dump"
 
+//		while (cmdStr.startsWith("-"))
+//			-r repo
+//			-u username
+//			-p password
+//			-t target
+		
 		if ("\\? -? -h -help --help".split.contains(cmdStr))
 			cmdStr = "help"
-		
-		// FIXME update cmd
-		if (cmdStr == "update")
-			cmdStr = "install"
 
 		cmdType := Main#.pod.type("${cmdStr.lower.capitalize}Cmd", false)
 		if (cmdType == null)
@@ -38,7 +40,7 @@ internal class Main {
 		return cmd.run	
 	}
 
-	private static Depend? parseTarget(Field field, Str arg) {
+	private static Depend parseTarget(Field field, Str arg) {
 		dep := arg.replace("@", " ")
 		if (!dep.contains(" "))
 			dep += " 0+"

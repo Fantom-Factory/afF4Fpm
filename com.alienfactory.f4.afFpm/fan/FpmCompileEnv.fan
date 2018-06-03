@@ -11,34 +11,10 @@ const class FpmCompileEnv : CompileEnv {
 
 	const AtomicRef	fpmConfigRef		:= AtomicRef()
 	const AtomicRef	resolveErrsRef		:= AtomicRef()
-	const AtomicRef	dependsStrRef		:= AtomicRef()
-	const AtomicRef	resolvePodsRef		:= AtomicRef()
-	const AtomicRef	resolveFutureRef	:= AtomicRef()
 
 	new make(FantomProject? fanProj := null) : super.make(fanProj) { }
 
 	override Str:File resolvePods() {
-		// FIXME pull this logic up into FantomProject
-		dependsStr := fanProj.rawDepends.rw.sort |p1, p2| { p1.name <=> p2.name }.join("; ")
-		if (dependsStr == dependsStrRef.val)
-			return resolvePodsRef.val
-		
-		// coalesce multiple calls into one
-		future := resolveFutureRef.val as Future
-		if (future == null) {		
-			future = Synchronized(ActorPool()).async |->Obj?| { doResolvePods(dependsStr) }
-			resolveFutureRef.val = future
-		} else
-			buildConsole.debug("Coalescing build... for $target")
-
-		pods := future.get
-		resolvePodsRef.val		= pods
-		dependsStrRef.val		= dependsStr
-		resolveFutureRef.val	= null
-		return pods
-	}
-
-	private Str:File doResolvePods(Str dependsStr) {
 		// this method has been ripped and cut down from FpmEnv
 		log 			:= buildConsole
 		fpmConfig		:= fpmConfig

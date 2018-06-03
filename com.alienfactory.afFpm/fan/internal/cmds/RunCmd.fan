@@ -27,20 +27,39 @@ class RunCmd : FpmCmd {
 
 	new make(|This| f) : super(f) { }
 	
-	override Int run() {		
+	override Int run() {
 		if (pod == null) {
 			log.warn("Run what!?")
 			return invalidArgs
+		}
+
+		// allow for explicit targets -> afFpm afGame@2.0
+		targetNotSet := target == null
+		dep := parseTarget(pod)
+		if (dep != null) {
+			if (targetNotSet)
+				target = dep
+			pod = dep.name
+		}
+		
+		// cater for launch pods such as afBedSheet and afReflux
+		if (fpmConfig.launchPods.contains(pod)) {
+			dep = parseTarget(args.getSafe(0))
+			if (dep != null) {
+				if (targetNotSet)
+					target = dep
+				args[0] = dep.name
+			}
 		}
 
 		cmds := Str[pod]
 		if (args != null)
 			cmds.addAll(args)
 
-		if (javascript)
-			throw UnsupportedErr("-js")
-			// FIXME run javascript
-//			cmds.insert(0, "compilerJs::NodeRunner blah blah blah")
+		if (javascript) {
+			cmds.insert(0, "-run")
+			cmds.insert(0, "compilerJs::NodeRunner")
+		}
 
 		log.info("FPM running " + cmds.join(" "))
 
@@ -48,9 +67,8 @@ class RunCmd : FpmCmd {
 		process.mergeErr = false
 		process.env["FAN_ENV"]		= FpmEnv#.qname
 		process.env["FPM_DEBUG"]	= debug.toStr
-		if (target != null)
-			process.env["FPM_TARGET"]	= target.toStr
+		process.env["FPM_TARGET"]	= target?.toStr ?: pod	// always set this, to clear any existing env vars. Use 'pod' as fall back to pass the .fan scripts in 
 
 		return process.run.join
-	}
+	}	
 }

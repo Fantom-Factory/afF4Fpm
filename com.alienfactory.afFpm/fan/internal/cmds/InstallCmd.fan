@@ -20,27 +20,30 @@
 ** 
 ** To download and install a specific pod version to a local repository:
 ** 
-**   C:\> fpm install -r release myPod 2.0.10
+**   C:\> fpm install -r release "myPod 2.0.10"
 ** 
-** To upload and publish a pod to the Fantom-Factory repository:
+** To upload and publish a pod to the eggbox repository:
 ** 
-**   C:\> fpm install -r fantomFactory lib/myGame.pod
+**   C:\> fpm install -r eggbox lib/myPod.pod
 ** 
 @NoDoc	// Fandoc is only saved for public classes
 class InstallCmd : FpmCmd {
 	
-	@Opt { aliases=["r"]; help="Name or location of repository to install to (defaults to 'default')" }
+	@Opt { aliases=["r"]; help="Name or location of repository to install pods to (defaults to 'default')" }
 	Repository repo
 
 	@Opt { aliases=["c"]; help="Query and install Fantom core pods" } 
 	Bool core
+	
+	@Opt { aliases=["o"]; help="If specified, then only local repositories will be queried" }
+	Bool offline
 	
 	@Opt { aliases=["u"]; help="Username for remote fanr authentication" }
 	Str? username
 	
 	@Opt { aliases=["p"]; help="Password for remote fanr authentication" }
 	Str? password
-	
+
 	@Arg { help="location or query for pod" }
 	Str? pod
 
@@ -58,11 +61,21 @@ class InstallCmd : FpmCmd {
 	override Int run() {
 		// because the InstallCmd is so varied, lets have individual titles 
 //		log.info("FPM installing ${pod}"))
+		if (offline)
+			log.info("<FPM offline mode>")
+
+		if (pod == null) {
+			log.warn("Install what!?")
+			return invalidArgs
+		}
 		
 		resolver := Resolver(fpmConfig.repositories)
 		resolver.maxPods	= 1
 		resolver.corePods	= core
 		resolver.log		= log
+		
+		if (offline)
+			resolver.localOnly
 		
 		file := FileUtils.toFile(pod).normalize
 		if (file.exists) {
@@ -92,22 +105,32 @@ class InstallCmd : FpmCmd {
 					log.warn(Utils.dumpUnresolved(satisfied.unresolvedPods.vals))
 					return 9
 				}
-				podFiles := satisfied.resolvedPods.findAll { it.repository.isRemote }
-				podFiles.each |podFile| {
-					log.info("Installing ${podFile.depend} to ${repo.name} (from ${podFile.repository.name})")
-					podFile.installTo(repo)
+				
+				if (repo.isDirRepo) {
+					satisfied.resolvedPods.each {
+						it.installTo(repo)						
+					}
+					log.info("Copied ${satisfied.resolvedPods.size} pods to ${repo.url.toFile.normalize.osPath}")
+
+				} else {
+					podFiles := satisfied.resolvedPods.findAll { it.repository.isRemote }
+					podFiles.each |podFile| {
+						log.info("Installing ${podFile.depend} to ${repo.name} (from ${podFile.repository.name})")
+						podFile.installTo(repo)
+					}
+					if (podFiles.isEmpty)
+						log.info("No remote dependency updates found.")
+					else
+						log.info("Done.")
 				}
-				if (podFiles.isEmpty)
-					log.info("No remote dependencies found.")
-				else
-					log.info("Done.")
+
 				return 0
 			}
 			
 			// install a directory of pods
 			if (file.isDir) {
-				log.info("FPM installing pod files from ${file.osPath}")
-				files	 := file.listFiles(Regex.glob("*.pod"))
+				files := file.listFiles(Regex.glob("*.pod"))
+				log.info("FPM installing ${file.size} pod files from ${file.osPath}")
 				podFiles := (PodFile[]) files.map { PodFile(it) }
 				if (!core) podFiles = podFiles.exclude { it.isCore }
 				podFiles.each |podFile| {
@@ -170,12 +193,5 @@ class InstallCmd : FpmCmd {
 		}
 		
 		throw Err("Unknown target: $pod")
-	}
-	
-	private static Depend? parseTarget(Str arg) {
-		dep := arg.replace("@", " ")
-		if (!dep.contains(" "))
-			dep += " 0+"
-		return Depend(dep, true)
 	}
 }

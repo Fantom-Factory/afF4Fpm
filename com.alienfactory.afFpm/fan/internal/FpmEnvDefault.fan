@@ -1,19 +1,15 @@
 
+** Originally, this existed so I could create an F4 version.
+** But I guess this *could* now be merged in to FpmEnv.
+** Hmm... but I like the split / separation of concerns!
 internal const class FpmEnvDefault : FpmEnv {
 
 	static new make() {
 		try {
-			if (Env.cur.vars["FPM_DEBUG"]?.trimToNull == "true")
+			if (Env.cur.vars["FPM_DEBUG"]?.lower?.toBool(false) == true)
 				FpmEnv#.pod.log.level = LogLevel.debug
 
-			fpmConfig	:= FpmConfig()
-	
-			// add F4 pod locations
-			f4PodPaths	:= Env.cur.vars["FAN_ENV_PODS"]?.trimToNull?.split(File.pathSep.chars.first, true) ?: Str#.emptyList
-			f4PodFiles	:= f4PodPaths.map { toFile(it) }
-			fpmEnv 		:= makeManual(fpmConfig, f4PodFiles)
-	
-			return fpmEnv
+			return makeManual(FpmConfig())
 			
 		} catch (Err e) {
 			// this is really just belts and braces for FPM development as
@@ -23,18 +19,19 @@ internal const class FpmEnvDefault : FpmEnv {
 		}
 	}
 	
-	private new makeManual(FpmConfig fpmConfig, File[] podFiles, |This|? in := null) : super.makeManual(fpmConfig, podFiles, in) { }
+	private new makeManual(FpmConfig fpmConfig, |This|? in := null) : super.makeManual(fpmConfig, in) { }
 
-	override TargetPod findTarget() {
+	override TargetPod? findTarget() {
 		fanArgs	:= Env.cur.args
 		fpmArgs	:= Utils.splitQuotedStr(Env.cur.vars["FPM_TARGET"])
 		cmdArgs	:= fpmArgs ?: fanArgs
 		
 		// a fail safe / get out jail card for pin pointing the targeted environment 
-		idx := cmdArgs.index("-fpmPod")
+		idx := cmdArgs.index("-fpmTarget")
 		if (idx != null) {
 			podDepend := findPodDepend(cmdArgs.getSafe(idx + 1))
-			return TargetPod(podDepend)
+			if (podDepend != null)
+				return TargetPod(podDepend)
 		}
 
 		// FPM_TARGET - use it if we got it
@@ -48,6 +45,10 @@ internal const class FpmEnvDefault : FpmEnv {
 			if (podDepend != null) {
 				return TargetPod(podDepend)
 			}
+			
+			// scripts don't have pod targets, so default to using the latest pods
+			if (cmdArgs.first.endsWith(".fan"))
+				return null
 		}
 
 		// this is only good for basic 'C:\>fan afEggbox' type cmds
@@ -78,25 +79,17 @@ internal const class FpmEnvDefault : FpmEnv {
 		if (arg == null || arg.endsWith(".fan"))
 			return null
 
-		// FIXME ?? check for version e.g. afIoc@3.0
-		dependStr := (Str?) null
-		if (arg.all { isAlphaNum })
-			dependStr = arg
+		if (arg.contains("::"))
+			arg = arg[0..<arg.index("::")]
 
-		if (dependStr == null && arg.all { isAlphaNum || equals(':') || equals('.') } && arg.contains("::"))
-			dependStr = arg[0..<arg.index("::")]
-
-		// double check valid pod names
-		if (dependStr == null || dependStr.all { isAlphaNum }.not)
-			return null
+		arg = arg.replace("@", " ")
 		
-		dependStr += " 0+"
+		if (!arg.contains(" "))
+			arg += " 0+"
 
-		return Depend(dependStr, true)
-	}
-
-	static File toFile(Str filePath) {
-		file := filePath.startsWith("file:") ? File(filePath.toUri, false) : File.os(filePath)
-		return file.normalize
+		if (arg.all { isAlphaNum || equals(' ') || equals('.') || equals('-') || equals('+') })
+			return Depend(arg, false)
+		
+		return null
 	}
 }

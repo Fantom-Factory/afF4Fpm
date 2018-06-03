@@ -16,6 +16,7 @@
 ** 
 **   fanrRepo.eggbox = 
 ** 
+** Read the comments in the actual 'fpm.props' file itself for more details.
 const class FpmConfig {
 
 	** The directory used to resolve relative files.
@@ -120,12 +121,13 @@ const class FpmConfig {
 		strInterpol := |Str? str->Str?| {
 			if (str == null)
 				return null
+			// don't replace with osPath because it has a trailing slash on nix, but not on windows!
 			if ((this.homeDir as File) != null)
-				str = str.replace("\$fanHome", homeDir.osPath).replace("\${fanHome}", homeDir.osPath)
+				str = str.replace("\$fanHome", homeDir.uri.toStr).replace("\${fanHome}", homeDir.uri.toStr)
 			if ((this.workDirs as File[]) != null)
-				str = str.replace("\$workDir", workDirs.first.osPath).replace("\${workDir}", workDirs.first.osPath)
+				str = str.replace("\$workDir", workDirs.first.uri.toStr).replace("\${workDir}", workDirs.first.uri.toStr)
 			if ((this.tempDir as File) != null)
-				str = str.replace("\$tempDir", tempDir.osPath).replace("\${tempDir}", tempDir.osPath)
+				str = str.replace("\$tempDir", tempDir.uri.toStr).replace("\${tempDir}", tempDir.uri.toStr)
 			return str
 		}
 
@@ -159,7 +161,7 @@ const class FpmConfig {
 			url  := Uri(path, false)
 
 			if (url?.scheme != "http" && url?.scheme != "https")
-				url = toRelDir(path, baseDir).uri
+				url = toRelDir(strInterpol(path.trim), baseDir).uri
 			else
 				if (url.userInfo != null) {
 					userInfo := url.userInfo.split(':')
@@ -234,9 +236,9 @@ const class FpmConfig {
 			return LocalDirRepository(repoName, dirRepos[repoName])
 		
 		if (fanrRepos.containsKey(repoName)) {
-			if (username != null)
+			if (username == null)
 				username = _rawConfig["fanrRepo.${repoName}.username"]
-			if (password != null)
+			if (password == null)
 				password = _rawConfig["fanrRepo.${repoName}.password"]
 			url := fanrRepos[repoName]
 			if (url.scheme == null   || url.scheme == "file")

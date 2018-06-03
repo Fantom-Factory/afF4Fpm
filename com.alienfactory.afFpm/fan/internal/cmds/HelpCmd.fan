@@ -9,6 +9,8 @@ class HelpCmd : FpmCmd {
 	new make(|This| f) : super(f) { }
 
 	override Int run() {
+		log.info("")
+
 		if (cmd == null) {
 			logAvailableCmds
 			return 0
@@ -40,8 +42,7 @@ class HelpCmd : FpmCmd {
 		log.info("".padl(title.size, '-'))
 		log.info("")
 		log.info("Known commands:")
-		// FIXME setup cmd
-//		logCmdSynopsis(SetupCmd#)
+		logCmdSynopsis(SetupCmd#)
 		logCmdSynopsis(HelpCmd#)
 		log.info("")
 		logCmdSynopsis(BuildCmd#)
@@ -51,7 +52,7 @@ class HelpCmd : FpmCmd {
 		logCmdSynopsis(QueryCmd#)
 		logCmdSynopsis(InstallCmd#)
 		logCmdSynopsis(DeleteCmd#)
-//		logCmdSynopsis(UpdateCmd#)
+		logCmdSynopsis(UpdateCmd#)
 		log.info("\nUsage:
 		            fpm <command> [options]
 		          
@@ -108,7 +109,7 @@ class HelpCmd : FpmCmd {
 
 		col1 := "-$name"
 		if (!aliases.isEmpty)			col1 += ", -" + aliases.join(", -")
-		//if (!field.type.fits(Bool#))	col1 += " <$field.type.name>"
+		if (!field.type.fits(Bool#))	col1 += " <$field.type.name>"
 
 		col2 := help
 		return [col1, help]
@@ -117,7 +118,7 @@ class HelpCmd : FpmCmd {
 	private Str[][] usagePad(Str[][] rows) {
 		if (rows.isEmpty) return rows
 		Int max := rows.map |row| { row[0].size }.max
-		pad := 20.min(2 + max)
+		pad := 22.min(2 + max)
 		rows.each |row| { row[0] = row[0].padr(pad) }
 		return rows
 	}
