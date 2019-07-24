@@ -2,7 +2,7 @@
 <feature
       id="com.alienfactory.f4.feature"
       label="Alien-Factory F4 Add-Ons"
-      version="1.1.2.qualifier"
+      version="1.1.4"
       provider-name="Alien-Factory">
 
    <description url="http://pods.fantomfactory.org/pods/afFpm/">
@@ -11,7 +11,7 @@
    </description>
 
    <license url="">
-      Copyright (c) 2016, Steve Eynon
+      Copyright (c) 2016-2019, Steve Eynon
 
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 
@@ -19,7 +19,7 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTI
    </license>
 
    <url>
-      <discovery label="Fantom-Factory Pod Repository" url="http://pods.fantomfactory.org/"/>
+      <discovery label="Fantom-Factory Pod Repository" url="http://eggbox.fantomfactory.org/"/>
    </url>
 
    <requires>
@@ -54,7 +54,7 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTI
          id="com.alienfactory.afFpm"
          download-size="0"
          install-size="0"
-         version="1.0.0.qualifier"
+         version="2.0.2"
          unpack="false"/>
 
 </feature>
