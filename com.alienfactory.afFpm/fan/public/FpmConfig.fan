@@ -64,7 +64,7 @@ const class FpmConfig {
 		
 		// grab the config filename from an env var, but only if the version matches
 		// this is useful for testing and development
-		t1 := Env.cur.vars["FPM_CONFIG_FILENAME"]
+		t1 := Env.cur.vars["FPM_CONFIG_FILENAME"]	// = fpm.props/2.0.1
 		if (t1 != null) {
 			t2 := Uri(t1, false)
 			if (t2 != null) {
@@ -85,25 +85,35 @@ const class FpmConfig {
 		while (fpmFile != null && !fpmFile.exists)
 			fpmFile = fpmFile.parent.parent?.plus(configFilename)
 
-		// this is a little bit chicken and egg - we use the workDir to find config.props to find the workDir! 
+		// this is a little bit chicken and egg - we use the workDir to find fpm.props to find the workDir! 
 		workDirs := "" as Str
 		workDirs = (workDirs?.trimToNull == null ? "" : workDirs + File.pathSep) + (envPaths ?: "")
 		workDirs = (workDirs?.trimToNull == null ? "" : workDirs + File.pathSep) + homeDir.osPath
-		workFile := workDirs.split(File.pathSep.chars.first).exclude { it.isEmpty }.map { toAbsDir(it) + `etc/afFpm/` + configFilename }.unique as File[]
+		workFile := workDirs.split(File.pathSep.chars.first).exclude { it.isEmpty }.map { toRelDir(it, baseDir) + `etc/afFpm/` + configFilename }.unique as File[]
 		if (fpmFile != null)
 			workFile.insert(0, fpmFile)
 
 		workFile = workFile.findAll { it.exists }
 
 		fpmProps := Str:Str[:] { it.ordered = true }
+		wokFiles := File[,]
 		workFile.eachr {
-			newProps := it.readProps
-			if (newProps["configCmd"] == "clearExisting")
+			newProps := null as Str:Str
+			try	newProps = it.readProps
+			catch (Err err)
+				FpmConfig#.pod.log.warn("Could not read ${it.normalize.osPath} ($err)")
+			
+			if (newProps["configCmd"] == "clearExisting") {
+				// clearExisting should clear EVERYTHING! Let the new config define exactly what it needs
+				wokFiles.clear
 				fpmProps.clear
+				envPaths = null
+			}
+			wokFiles.add(it)
 			fpmProps.setAll(it.readProps)
 		}
 
-		return makeInternal(baseDir, homeDir, envPaths, fpmProps, workFile.reverse)
+		return makeInternal(baseDir, homeDir, envPaths, fpmProps, wokFiles)
 	}
 
 	@NoDoc
@@ -134,12 +144,12 @@ const class FpmConfig {
 		workDirs := strInterpol(fpmProps["workDirs"])
 		workDirs = (workDirs?.trimToNull == null ? "" : workDirs + File.pathSep) + (envPaths ?: "")
 		workDirs = (workDirs?.trimToNull == null ? "" : workDirs + File.pathSep) + homeDir.osPath.toStr
-		this.workDirs = workDirs.split(File.pathSep.chars.first).exclude { it.isEmpty }.map { toAbsDir(it) }.unique
+		this.workDirs = workDirs.split(File.pathSep.chars.first).exclude { it.isEmpty }.map { toRelDir(it, baseDir) }.unique
 		
 		tempDir := strInterpol(fpmProps["tempDir"])
 		if (tempDir == null)
 			tempDir = this.workDirs.first.plus(`temp/`, false).osPath.toStr
-		this.tempDir = toAbsDir(tempDir)
+		this.tempDir = toRelDir(tempDir, baseDir)
 
 		dirRepos := (Str:File) fpmProps.findAll |path, name| {
 			name.startsWith("dirRepo.")
@@ -314,17 +324,14 @@ const class FpmConfig {
 		if (files.isEmpty)
 			return "(none)\n"
 
-		str := "${files.first.osPath}\n"
+		ext := files.first.exists ? "" : " (does not exist)"
+		str := "${files.first.osPath}${ext}\n"
 		if (files.size > 1)
 			files[1..-1].each {
 				exists := it.exists ? "" : " (does not exist)"
 				str += "".justr(14) + "   ${it.osPath}${exists}\n"
 			}
 		return str
-	}
-	
-	private static File toAbsDir(Str dirPath) {
-		FileUtils.toAbsDir(dirPath)
 	}
 	
 	private static File toRelDir(Str dirPath, File baseDir) {
