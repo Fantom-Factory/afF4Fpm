@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: afFpm
 Bundle-SymbolicName: com.alienfactory.afFpm;singleton:=true
-Bundle-Version: 2.0.2
+Bundle-Version: 2.0.4
 Require-Bundle: org.fantom.sys,
  org.fantom.fanr;resolution:=optional,
  org.fantom.concurrent,

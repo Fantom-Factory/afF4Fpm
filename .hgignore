@@ -1,7 +1,6 @@
 syntax: glob
 bin
 build
-afFpm.pod
 f4afFpm.pod
 
 syntax: regexp
