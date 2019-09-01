@@ -2,7 +2,7 @@
 <feature
       id="com.alienfactory.f4.feature"
       label="Alien-Factory F4 Add-Ons"
-      version="1.1.6"
+      version="1.1.8"
       provider-name="Alien-Factory">
 
    <description url="http://pods.fantomfactory.org/pods/afFpm/">
@@ -54,7 +54,7 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTI
          id="com.alienfactory.afFpm"
          download-size="0"
          install-size="0"
-         version="2.0.4"
+         version="2.0.6"
          unpack="false"/>
 
 </feature>
