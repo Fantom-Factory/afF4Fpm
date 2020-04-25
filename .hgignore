@@ -1,6 +1,0 @@
-syntax: glob
-bin
-build
-f4afFpm.pod
-
-syntax: regexp
