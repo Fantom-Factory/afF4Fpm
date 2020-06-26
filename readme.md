@@ -13,7 +13,7 @@ F4 Features currently boasts support for:
  
 ## Installation
 
-To install F4 Features, download the latest `.zip` from the [F4 FPM Releases Page](/Fantom-Factory/afF4Fpm/releases).
+To install F4 Features, download the latest `.zip` from the [F4 FPM Releases Page](https://github.com/Fantom-Factory/afF4Fpm/releases).
 
 From within F4 visit the main menu and click `Help -> Install new software...` Drag and drop the downloaded .zip file into the dialogue window.
 
