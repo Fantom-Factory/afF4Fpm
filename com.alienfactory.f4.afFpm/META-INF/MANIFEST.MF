@@ -15,4 +15,4 @@ Require-Bundle: org.fantom.sys,
  org.eclipse.dltk.launching,
  com.alienfactory.afFpm
 Bundle-Vendor: Alien-Factory
-Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+Bundle-RequiredExecutionEnvironment: JavaSE-1.8
