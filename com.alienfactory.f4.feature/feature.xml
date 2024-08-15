@@ -2,7 +2,7 @@
 <feature
       id="com.alienfactory.f4.feature"
       label="Alien-Factory F4 Add-Ons"
-      version="1.1.14"
+      version="1.1.16"
       provider-name="Alien-Factory">
 
    <description url="https://github.com/Fantom-Factory/afF4Fpm">
@@ -33,7 +33,6 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTI
       <import feature="org.eclipse.dltk.core"/>
       <import plugin="org.eclipse.dltk.ui"/>
       <import plugin="org.eclipse.dltk.launching"/>
-      <!--import plugin="com.alienfactory.afFpm"/-->
       <import plugin="org.fantom.concurrent"/>
       <import plugin="org.fantom.compiler"/>
       <import feature="com.xored.f4.feature"/>
@@ -51,7 +50,7 @@ THE SOFTWARE IS PROVIDED &quot;AS IS&quot; AND THE AUTHOR DISCLAIMS ALL WARRANTI
          id="com.alienfactory.afFpm"
          download-size="0"
          install-size="0"
-         version="2.1.6"
+         version="2.1.8"
          unpack="false"/>
 
 </feature>
